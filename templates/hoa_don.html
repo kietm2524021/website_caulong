@@ -173,8 +173,8 @@
                         </td>
                         <td>{{ tom_tat_hoa_don.san.tenSan }}<div class="muted">{{ tom_tat_hoa_don.san.maChiNhanh.tenChiNhanh }}</div></td>
                         <td>{{ tom_tat_hoa_don.so_buoi }}</td>
-                        <td class="money">{{ tom_tat_hoa_don.don_gia|intcomma }}đ</td>
-                        <td class="money">{{ tong_tien|intcomma }}đ</td>
+                        <td class="money">{{ tom_tat_hoa_don.don_gia|dotsep }}đ</td>
+                        <td class="money">{{ tong_tien|dotsep }}đ</td>
                     </tr>
                 </tbody>
             </table>
@@ -182,7 +182,7 @@
 
         <div class="total-row">
             <span class="total-label">Tổng cộng</span>
-            <span class="total-value">{{ tong_tien|intcomma }}đ</span>
+            <span class="total-value">{{ tong_tien|dotsep }}đ</span>
         </div>
         <div class="invoice-note">Vui lòng giữ hóa đơn để đối chiếu khi check-in hoặc cần hỗ trợ.</div>
     </div>

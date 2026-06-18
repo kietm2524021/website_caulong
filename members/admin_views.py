@@ -124,6 +124,21 @@ def prepare_booking_row(booking, group_items=None):
     booking.admin_group_deposit = sum((item.so_tien_coc or Decimal("0")) for item in items)
     booking.admin_group_first_date = items[0].ngayBatDau if items else booking.ngayBatDau
     booking.admin_group_last_date = items[-1].ngayBatDau if items else booking.ngayBatDau
+    if booking.trangThai == "cancelled":
+        booking.admin_flow_state = "cancelled"
+        booking.admin_flow_label = "Đã hủy"
+    elif booking.trangThai in {"confirmed", "completed"}:
+        booking.admin_flow_state = "approved"
+        booking.admin_flow_label = "Đã duyệt"
+    elif booking.khach_xac_nhan_chuyen_khoan:
+        booking.admin_flow_state = "deposited"
+        booking.admin_flow_label = "Khách đã báo chuyển cọc"
+    elif booking.yeu_cau_thanh_toan:
+        booking.admin_flow_state = "waiting"
+        booking.admin_flow_label = "Chờ khách đặt cọc"
+    else:
+        booking.admin_flow_state = "new"
+        booking.admin_flow_label = "Yêu cầu mới - chưa cọc"
     return booking
 
 
@@ -215,21 +230,29 @@ def perform_booking_action(request, booking, action):
         ThongBao.objects.create(
             nguoi_nhan=booking.nguoi_dat,
             tieu_de="Quản lý đã gửi yêu cầu đặt cọc",
-            noi_dung=f"Vui lòng hoàn tất đặt cọc cho sân {booking.san.tenSan} ngày {booking.ngayBatDau:%d/%m/%Y} trong vòng 15 phút.",
+            noi_dung=f"Vui lòng mở thông tin đặt cọc cho sân {booking.san.tenSan} ngày {booking.ngayBatDau:%d/%m/%Y}. Thời gian 15 phút bắt đầu khi bạn mở yêu cầu.",
+            loai="payment",
+            duong_dan=reverse("lich_su_dat_san"),
         )
-        return "Đã gửi yêu cầu đặt cọc cho khách. Yêu cầu có hiệu lực trong 15 phút."
+        return "Đã gửi yêu cầu đặt cọc. Đồng hồ 15 phút bắt đầu khi khách mở thông tin giao dịch."
     if action == "cancel":
+        reason = (request.POST.get("ly_do_huy") or "").strip()
+        if not reason:
+            return "Vui lòng nhập lý do hủy đơn."
         target.update(
             trangThai="cancelled",
             nguoi_duyet=request.user,
             yeu_cau_thanh_toan=False,
             ngay_khach_mo_thanh_toan=None,
             khach_xac_nhan_chuyen_khoan=False,
+            ly_do_huy=reason[:500],
         )
         ThongBao.objects.create(
             nguoi_nhan=booking.nguoi_dat,
             tieu_de="Đơn đặt sân đã bị hủy",
-            noi_dung=f"Yêu cầu đặt sân {booking.san.tenSan} ngày {booking.ngayBatDau:%d/%m/%Y} đã bị hủy.",
+            noi_dung=f"Yêu cầu đặt sân {booking.san.tenSan} ngày {booking.ngayBatDau:%d/%m/%Y} đã bị hủy. Lý do: {reason[:500]}",
+            loai="booking",
+            duong_dan=reverse("lich_su_dat_san"),
         )
         return "Đã hủy đơn đặt sân."
     if action == "complete":
@@ -243,9 +266,13 @@ def perform_booking_action(request, booking, action):
             nguoi_nhan=booking.nguoi_dat,
             tieu_de="Quản lý đã xác nhận tiền cọc",
             noi_dung=f"Khoản cọc của đơn sân {booking.san.tenSan} ngày {booking.ngayBatDau:%d/%m/%Y} đã được xác nhận. Đơn đặt sân đã được duyệt.",
+            loai="payment",
+            duong_dan=reverse("lich_su_dat_san"),
         )
         return "Đã xác nhận tiền cọc và duyệt đơn."
     if action == "delete":
+        if booking.trangThai == "cancelled":
+            return "Đơn đã hủy phải được giữ lại trong lịch sử."
         target.delete()
         return "Đã xóa đơn đặt sân khỏi hệ thống."
     return "Hành động không hợp lệ."
@@ -359,11 +386,15 @@ def admin_booking_bulk_action(request):
     selected_ids = request.POST.getlist("booking_ids")
     next_url = request.POST.get("next") or reverse("admin_bookings")
 
-    if action not in {"delete"}:
+    allowed_actions = {"request_payment", "mark_transfer_received", "cancel", "delete"}
+    if action not in allowed_actions:
         messages.error(request, "Hành động hàng loạt không hợp lệ.")
         return redirect(next_url)
     if not selected_ids:
         messages.warning(request, "Bạn chưa chọn đơn nào.")
+        return redirect(next_url)
+    if action == "delete" and request.POST.get("delete_confirmed") != "yes":
+        messages.warning(request, "Vui lòng xác nhận đủ hai bước trước khi xóa các đơn đã chọn.")
         return redirect(next_url)
 
     bookings = list(booking_queryset(request).filter(id__in=selected_ids).order_by("id"))
@@ -371,18 +402,52 @@ def admin_booking_bulk_action(request):
         messages.warning(request, "Không tìm thấy đơn hợp lệ trong phạm vi quản lý của bạn.")
         return redirect(next_url)
 
+    if action == "cancel" and not (request.POST.get("ly_do_huy") or "").strip():
+        messages.warning(request, "Vui lòng nhập lý do hủy các đơn đã chọn.")
+        return redirect(next_url)
+
     processed = set()
     done = 0
+    skipped = 0
     for booking in bookings:
         key = action_key_for_booking(booking)
         if key in processed:
             continue
         processed.add(key)
-        perform_booking_action(request, booking, action)
+        if action == "request_payment" and (
+            booking.trangThai != "pending" or booking.khach_xac_nhan_chuyen_khoan
+        ):
+            skipped += 1
+            continue
+        if action == "mark_transfer_received" and (
+            booking.trangThai != "pending"
+            or not booking.yeu_cau_thanh_toan
+            or not booking.khach_xac_nhan_chuyen_khoan
+        ):
+            skipped += 1
+            continue
+        if action == "cancel" and booking.trangThai != "pending":
+            skipped += 1
+            continue
+        if action == "delete":
+            if booking.loaiDatSan == 1 and booking.nhom_dat_san:
+                DatSan.objects.filter(nhom_dat_san=booking.nhom_dat_san).delete()
+            else:
+                booking.delete()
+        else:
+            perform_booking_action(request, booking, action)
         done += 1
 
-    action_label = "xóa"
-    messages.success(request, f"Đã {action_label} {done} đơn/nhóm đơn đã chọn.")
+    action_labels = {
+        "request_payment": "gửi yêu cầu cọc cho",
+        "mark_transfer_received": "xác nhận cọc và duyệt",
+        "cancel": "hủy",
+        "delete": "xóa",
+    }
+    message = f"Đã {action_labels[action]} {done} đơn/nhóm đơn."
+    if skipped:
+        message += f" Bỏ qua {skipped} đơn không phù hợp trạng thái."
+    messages.success(request, message)
     return redirect(next_url)
 
 

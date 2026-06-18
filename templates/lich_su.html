@@ -37,9 +37,11 @@
     .history-card:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
 
     /* Trạng thái thẻ */
-    .card-upcoming { border-left: 5px solid var(--primary); background: #f0fff4; }
+    .card-approved { border-left: 5px solid #16a34a; background: #ecfdf3; }
+    .card-waiting { border-left: 5px solid #eab308; background: #fefce8; }
     .card-past { opacity: 0.7; filter: grayscale(0.8); background: #f9f9f9; }
     .card-cancelled { border-left: 5px solid #e74c3c; opacity: 0.6; background: #fff5f5; }
+    .cancel-reason-box { margin-top: 9px; padding: 8px 10px; border-radius: 9px; color: #991b1b; background: #fee2e2; font-size: .76rem; }
 
     /* Layout bên trong Card */
     .card-body-custom { padding: 20px; display: grid; grid-template-columns: 80px 1fr auto; gap: 20px; align-items: center; }
@@ -139,7 +141,8 @@
         {% if item.is_group %}
             <div id="don-{{ item.invoice_id }}" class="history-card 
                 {% if item.trang_thai == 'cancelled' %}card-cancelled
-                {% elif item.is_upcoming %}card-upcoming
+                {% elif item.trang_thai == 'confirmed' or item.trang_thai == 'completed' %}card-approved
+                {% elif item.trang_thai == 'pending' %}card-waiting
                 {% else %}card-past{% endif %} animate__animated animate__fadeInUp">
                 
                 <div class="card-body-custom">
@@ -174,17 +177,20 @@
                     </div>
 
                     <div class="status-col">
-                        <div class="price-tag">{{ item.tong_tien|intcomma }}đ</div>
+                        <div class="price-tag">{{ item.tong_tien|dotsep }}đ</div>
 
                         {% if item.trang_thai == 'confirmed' %}
                             <span class="status-pill st-confirmed"><i class="fa-solid fa-check me-1"></i>Thành công</span>
                         {% elif item.trang_thai == 'pending' %}
                             <span class="status-pill st-pending"><i class="fa-solid fa-hourglass-half me-1"></i>Chờ duyệt</span>
+                        {% elif item.trang_thai == 'completed' %}
+                            <span class="status-pill st-confirmed"><i class="fa-solid fa-check-double me-1"></i>Đã hoàn thành</span>
                         {% else %}
                             <span class="status-pill st-cancelled"><i class="fa-solid fa-xmark me-1"></i>Đã hủy</span>
                         {% endif %}
                         <div class="small text-muted mt-2">{{ item.trang_thai_coc }}</div>
-                        <div class="small text-muted">Cọc: {{ item.so_tien_coc|intcomma }}đ · Còn lại: {{ item.so_tien_con_lai|intcomma }}đ</div>
+                        <div class="small text-muted">Cọc: {{ item.so_tien_coc|dotsep }}đ · Còn lại: {{ item.so_tien_con_lai|dotsep }}đ</div>
+                        {% if item.ly_do_huy %}<div class="cancel-reason-box"><strong>Lý do hủy:</strong> {{ item.ly_do_huy }}</div>{% endif %}
                         <div class="action-stack">
                             {% if item.show_invoice %}
                                 <a href="{% url 'xuat_hoa_don' item.invoice_id %}" class="invoice-action mini-action invoice" target="_blank">
@@ -195,18 +201,11 @@
                                 </a>
                             {% endif %}
                             {% if item.co_the_huy %}
-                                <form method="post" action="{% url 'huy_yeu_cau_dat_san' item.invoice_id %}">
+                                <form method="post" action="{% url 'huy_yeu_cau_dat_san' item.invoice_id %}" onsubmit="return requestCustomerCancelReason(this);">
                                     {% csrf_token %}
-                                    <button class="mini-action cancel" type="submit" onclick="return confirm('Hủy yêu cầu đặt sân này?');">
+                                    <input type="hidden" name="ly_do_huy" value="">
+                                    <button class="mini-action cancel" type="submit">
                                         <i class="fa-solid fa-ban"></i> Hủy
-                                    </button>
-                                </form>
-                            {% endif %}
-                            {% if item.trang_thai == 'pending' or item.trang_thai == 'cancelled' %}
-                                <form method="post" action="{% url 'xoa_yeu_cau_dat_san' item.invoice_id %}">
-                                    {% csrf_token %}
-                                    <button class="mini-action delete" type="submit" onclick="return confirm('Xóa yêu cầu này khỏi danh sách?');">
-                                        <i class="fa-solid fa-trash"></i> Xóa
                                     </button>
                                 </form>
                             {% endif %}
@@ -218,7 +217,8 @@
         {% else %}
             <div id="don-{{ item.invoice_id }}" class="history-card 
                 {% if item.obj.trangThai == 'cancelled' %}card-cancelled
-                {% elif item.is_upcoming %}card-upcoming
+                {% elif item.obj.trangThai == 'confirmed' or item.obj.trangThai == 'completed' %}card-approved
+                {% elif item.obj.trangThai == 'pending' %}card-waiting
                 {% else %}card-past{% endif %} animate__animated animate__fadeInUp">
                 
                 <div class="card-body-custom">
@@ -252,17 +252,20 @@
                     </div>
 
                     <div class="status-col">
-                        <div class="price-tag">{{ item.obj.tongGiaTien|intcomma }}đ</div>
+                        <div class="price-tag">{{ item.obj.tongGiaTien|dotsep }}đ</div>
 
                         {% if item.obj.trangThai == 'confirmed' %}
                             <span class="status-pill st-confirmed"><i class="fa-solid fa-check me-1"></i>Thành công</span>
                         {% elif item.obj.trangThai == 'pending' %}
                             <span class="status-pill st-pending"><i class="fa-solid fa-hourglass-half me-1"></i>Chờ duyệt</span>
+                        {% elif item.obj.trangThai == 'completed' %}
+                            <span class="status-pill st-confirmed"><i class="fa-solid fa-check-double me-1"></i>Đã hoàn thành</span>
                         {% else %}
                             <span class="status-pill st-cancelled"><i class="fa-solid fa-xmark me-1"></i>Đã hủy</span>
                         {% endif %}
                         <div class="small text-muted mt-2">{{ item.trang_thai_coc }}</div>
-                        <div class="small text-muted">Cọc: {{ item.so_tien_coc|intcomma }}đ · Còn lại: {{ item.so_tien_con_lai|intcomma }}đ</div>
+                        <div class="small text-muted">Cọc: {{ item.so_tien_coc|dotsep }}đ · Còn lại: {{ item.so_tien_con_lai|dotsep }}đ</div>
+                        {% if item.obj.ly_do_huy %}<div class="cancel-reason-box"><strong>Lý do hủy:</strong> {{ item.obj.ly_do_huy }}</div>{% endif %}
                         <div class="action-stack">
                             {% if item.show_invoice %}
                                 <a href="{% url 'xuat_hoa_don' item.invoice_id %}" class="invoice-action mini-action invoice" target="_blank">
@@ -273,18 +276,11 @@
                                 </a>
                             {% endif %}
                             {% if item.co_the_huy %}
-                                <form method="post" action="{% url 'huy_yeu_cau_dat_san' item.invoice_id %}">
+                                <form method="post" action="{% url 'huy_yeu_cau_dat_san' item.invoice_id %}" onsubmit="return requestCustomerCancelReason(this);">
                                     {% csrf_token %}
-                                    <button class="mini-action cancel" type="submit" onclick="return confirm('Hủy yêu cầu đặt sân này?');">
+                                    <input type="hidden" name="ly_do_huy" value="">
+                                    <button class="mini-action cancel" type="submit">
                                         <i class="fa-solid fa-ban"></i> Hủy
-                                    </button>
-                                </form>
-                            {% endif %}
-                            {% if item.obj.trangThai == 'pending' or item.obj.trangThai == 'cancelled' %}
-                                <form method="post" action="{% url 'xoa_yeu_cau_dat_san' item.invoice_id %}">
-                                    {% csrf_token %}
-                                    <button class="mini-action delete" type="submit" onclick="return confirm('Xóa yêu cầu này khỏi danh sách?');">
-                                        <i class="fa-solid fa-trash"></i> Xóa
                                     </button>
                                 </form>
                             {% endif %}
@@ -303,4 +299,13 @@
         </div>
     {% endfor %}
 </div>
+<script>
+    function requestCustomerCancelReason(form) {
+        const reason = window.prompt("Vui lòng nhập lý do hủy đơn để gửi đến quản lý:");
+        if (!reason || !reason.trim()) return false;
+        if (!window.confirm("Xác nhận hủy đơn với lý do: " + reason.trim() + "?")) return false;
+        form.querySelector('input[name="ly_do_huy"]').value = reason.trim();
+        return true;
+    }
+</script>
 {% endblock %}

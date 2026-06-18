@@ -23,7 +23,8 @@
     .info-row { display: grid; grid-template-columns: 145px 1fr; gap: 14px; padding: 11px 0; border-bottom: 1px solid #edf1f7; }
     .info-label { color: #64748b; font-size: .78rem; font-weight: 700; }
     .info-value { color: #1e293b; font-size: .88rem; font-weight: 800; word-break: break-word; }
-    .transfer-content { margin-top: 18px; padding: 15px; border-radius: 14px; background: #eff6ff; border: 1px solid #bfdbfe; }
+    .transfer-content { width: 100%; margin-top: 18px; padding: 15px; border-radius: 14px; background: #eff6ff; border: 1px solid #bfdbfe; text-align: left; cursor: pointer; transition: .2s ease; }
+    .transfer-content:hover { background: #dbeafe; border-color: #93c5fd; transform: translateY(-1px); }
     .transfer-content code { display: block; margin-top: 6px; color: #1d4ed8; font-family: inherit; font-size: .9rem; font-weight: 800; word-break: break-word; }
     .deposit-note { margin-top: 14px; color: #64748b; font-size: .78rem; line-height: 1.55; }
     .deposit-actions { padding: 20px 30px; border-top: 1px solid #edf1f7; background: #f8fafc; display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
@@ -65,8 +66,8 @@
                         <div class="qr-empty">Chi nhánh chưa cập nhật mã QR. Vui lòng chuyển khoản theo thông tin bên cạnh.</div>
                     {% endif %}
                     <div class="small text-muted mt-3">Số tiền cần đặt cọc</div>
-                    <div class="deposit-amount">{{ so_tien_coc|intcomma }}đ</div>
-                    <div class="small text-muted">Tổng tiền: {{ tong_tien|intcomma }}đ<br>Còn lại: {{ so_tien_con_lai|intcomma }}đ</div>
+                    <div class="deposit-amount">{{ so_tien_coc|dotsep }}đ</div>
+                    <div class="small text-muted">Tổng tiền: {{ tong_tien|dotsep }}đ<br>Còn lại: {{ so_tien_con_lai|dotsep }}đ</div>
                 </div>
 
                 <div>
@@ -76,10 +77,11 @@
                     <div class="info-row"><span class="info-label">Chủ tài khoản</span><span class="info-value">{{ booking.san.maChiNhanh.chu_tai_khoan|default:"Chưa cập nhật" }}</span></div>
                     <div class="info-row"><span class="info-label">Loại đặt sân</span><span class="info-value">{{ booking.get_loaiDatSan_display }}{% if is_group %} · {{ so_buoi }} buổi{% endif %}</span></div>
                     <div class="info-row"><span class="info-label">Khung giờ</span><span class="info-value">{{ booking.gioBatDau|date:"H:i" }} - {{ booking.gioKetThuc|date:"H:i" }}</span></div>
-                    <div class="transfer-content">
-                        <span class="info-label">Nội dung chuyển khoản</span>
+                    <button class="transfer-content" id="copyTransferContent" type="button" data-copy="{{ booking.noi_dung_chuyen_khoan }}">
+                        <span class="info-label">Nội dung chuyển khoản · Nhấp để sao chép <i class="fa-regular fa-copy ms-1"></i></span>
                         <code>{{ booking.noi_dung_chuyen_khoan }}</code>
-                    </div>
+                        <span class="small text-success fw-bold d-none" id="copyFeedback"><i class="fa-solid fa-check me-1"></i>Đã sao chép vào bộ nhớ tạm</span>
+                    </button>
                     <p class="deposit-note">Vui lòng chuyển đúng số tiền và nội dung để quản lý đối soát nhanh. Sau khi hoàn tất, chọn “Đã chuyển khoản”.</p>
                 </div>
             </div>
@@ -87,9 +89,10 @@
             {% if het_han %}<div class="expired-alert"><i class="fa-solid fa-circle-exclamation me-2"></i>Yêu cầu đặt cọc đã hết hạn. Bạn vẫn có thể hủy đơn hoặc chờ quản lý gửi lại yêu cầu mới.</div>{% endif %}
 
             <footer class="deposit-actions">
-                <form method="post" action="{% url 'huy_yeu_cau_dat_san' booking.id %}">
+                <form method="post" action="{% url 'huy_yeu_cau_dat_san' booking.id %}" onsubmit="return requestDepositCancelReason(this);">
                     {% csrf_token %}
-                    <button class="deposit-btn cancel" type="submit" onclick="return confirm('Bạn có chắc muốn hủy yêu cầu đặt sân này?');"><i class="fa-solid fa-ban"></i> Hủy đặt sân</button>
+                    <input type="hidden" name="ly_do_huy" value="">
+                    <button class="deposit-btn cancel" type="submit"><i class="fa-solid fa-ban"></i> Hủy đặt sân</button>
                 </form>
                 <form method="post" action="{% url 'xac_nhan_da_chuyen_khoan' booking.id %}">
                     {% csrf_token %}
@@ -104,6 +107,8 @@
     const counter = document.querySelector('.payment-countdown');
     const deadline = new Date(counter.dataset.deadline).getTime();
     const confirmButton = document.querySelector('.deposit-btn.confirm');
+    const copyButton = document.getElementById('copyTransferContent');
+    const copyFeedback = document.getElementById('copyFeedback');
     let timer = null;
     function updateCountdown() {
         const remaining = Math.max(0, deadline - Date.now());
@@ -118,5 +123,32 @@
     }
     updateCountdown();
     if (deadline > Date.now()) timer = setInterval(updateCountdown, 1000);
+
+    async function copyTransferContent() {
+        const content = copyButton.dataset.copy;
+        try {
+            await navigator.clipboard.writeText(content);
+        } catch (error) {
+            const input = document.createElement('textarea');
+            input.value = content;
+            input.style.position = 'fixed';
+            input.style.opacity = '0';
+            document.body.appendChild(input);
+            input.select();
+            document.execCommand('copy');
+            input.remove();
+        }
+        copyFeedback.classList.remove('d-none');
+        window.setTimeout(function() { copyFeedback.classList.add('d-none'); }, 2200);
+    }
+    copyButton.addEventListener('click', copyTransferContent);
+
+    function requestDepositCancelReason(form) {
+        const reason = window.prompt("Vui lòng nhập lý do hủy đơn để gửi đến quản lý:");
+        if (!reason || !reason.trim()) return false;
+        if (!window.confirm("Xác nhận hủy đơn với lý do: " + reason.trim() + "?")) return false;
+        form.querySelector('input[name="ly_do_huy"]').value = reason.trim();
+        return true;
+    }
 </script>
 {% endblock %}

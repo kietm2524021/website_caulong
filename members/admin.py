@@ -153,7 +153,7 @@ class SanCauLongAdmin(BranchBasedAdmin):
 
                 self.message_user(
                     request,
-                    f"Đã cập nhật {queryset.count()} sân – {price_type} = {price_value:,}đ"
+                    f"Đã cập nhật {queryset.count()} sân – {price_type} = {price_value:,}đ".replace(",", ".")
                 )
                 return None
 
@@ -223,7 +223,7 @@ class DatSanAdmin(ConsoleHiddenAdminMixin, BranchBasedAdmin):
         val = obj.tongGiaTien
         if obj.loaiDatSan == 1:
             val = DatSan.objects.filter(nhom_dat_san=obj.nhom_dat_san).aggregate(Sum('tongGiaTien'))['tongGiaTien__sum'] or 0
-        formatted_price = "{:,.0f}".format(float(val))
+        formatted_price = "{:,.0f}".format(float(val)).replace(",", ".")
         color = "#27ae60" if obj.daThanhToan else "#e74c3c"
         return format_html(
             '<b style="color: {};">{}đ</b><br><small>{}</small>',

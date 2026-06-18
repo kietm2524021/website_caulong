@@ -30,7 +30,7 @@
 <section class="panel">
     <div class="panel-header">
         <h2 class="panel-title">Danh sách bài viết</h2>
-        <span class="muted small">{{ posts.paginator.count|intcomma }} kết quả</span>
+        <span class="muted small">{{ posts.paginator.count|dotsep }} kết quả</span>
     </div>
     <div class="table-responsive">
         <table class="table-admin">
@@ -53,7 +53,7 @@
                     </td>
                     <td>{{ post.nguoi_dang.ten|default:post.nguoi_dang.username }}<br><span class="muted small">{{ post.nguoi_dang.sodienthoai }}</span></td>
                     <td>{{ post.ngay_dang|date:"d/m/Y H:i" }}</td>
-                    <td>{{ post.luot_xem|intcomma }}</td>
+                    <td>{{ post.luot_xem|dotsep }}</td>
                     <td>
                         {% if post.duyet_bai %}
                             <span class="status-pill st-confirmed">Đã duyệt</span>

@@ -106,8 +106,9 @@ class BookingSupportInvoiceTests(TestCase):
         self.assertEqual(booking.phuong_thuc_thanh_toan, "bank")
         self.assertEqual(
             booking.noi_dung_chuyen_khoan,
-            f"{booking_date.strftime('%d/%m/%Y')}-19:00-20:00-San 2-Khach Test",
+            f"DATCOC-KHACHTEST-SAN2-{booking_date.strftime('%d%m%y')}-10000",
         )
+        self.assertTrue(booking.noi_dung_chuyen_khoan.isascii())
 
     def test_booking_form_has_recruitment_defaults_and_no_payment_method_box(self):
         response = self.client.get(f"{reverse('dat_san')}?san_id={self.court_1.id}")
@@ -164,8 +165,9 @@ class BookingSupportInvoiceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "15 buổi")
         content = response.content.decode("utf-8")
-        self.assertTrue("600.000đ" in content or "600,000đ" in content)
+        self.assertIn("600.000đ", content)
         self.assertEqual(content.count('class="form-check-input booking-select"'), 1)
+        self.assertContains(response, 'id="selectAllBookings"')
 
     @patch.dict(os.environ, {"AI_SUPPORT_ENABLED": "False"}, clear=False)
     def test_support_auto_reply_and_admin_handoff(self):
@@ -586,8 +588,15 @@ class BookingSupportInvoiceTests(TestCase):
         detail = self.client.get(reverse("chi_tiet_dat_coc", args=[booking.id]))
         self.assertContains(detail, "Chi tiết thanh toán tiền cọc")
         self.assertContains(detail, 'class="payment-countdown"')
+        self.assertContains(detail, f'data-copy="{booking.noi_dung_chuyen_khoan}"')
+        self.assertContains(detail, f"<code>{booking.noi_dung_chuyen_khoan}</code>", html=True)
+        self.assertRegex(
+            booking.noi_dung_chuyen_khoan,
+            r"^DATCOC-[A-Z0-9]+-[A-Z0-9]+-\d{6}-\d+$",
+        )
         self.assertContains(detail, "Đã chuyển khoản")
         self.assertContains(detail, "Hủy đặt sân")
+        self.assertContains(detail, "Nhấp để sao chép")
 
         history_after_open = self.client.get(reverse("lich_su_dat_san"))
         self.assertNotContains(history_after_open, "Chi tiết thanh toán tiền cọc")
@@ -596,6 +605,61 @@ class BookingSupportInvoiceTests(TestCase):
         self.client.post(reverse("mo_yeu_cau_dat_coc", args=[booking.id]))
         booking.refresh_from_db()
         self.assertEqual(booking.ngay_khach_mo_thanh_toan, opened_at)
+
+    def test_customer_deposit_confirmation_notifies_admin(self):
+        booking = DatSan.objects.create(
+            nguoi_dat=self.user,
+            san=self.court_1,
+            ngayBatDau=timezone.now().date() + timedelta(days=5),
+            gioBatDau=time(18, 0),
+            gioKetThuc=time(19, 0),
+            tongGiaTien=50000,
+            yeu_cau_thanh_toan=True,
+            ngay_gui_yeu_cau_thanh_toan=timezone.now(),
+            ngay_khach_mo_thanh_toan=timezone.now(),
+        )
+        self.client.post(reverse("xac_nhan_da_chuyen_khoan", args=[booking.id]))
+        notification = ThongBao.objects.get(nguoi_nhan=self.admin, loai="payment")
+        self.assertIn("đã xác nhận đặt cọc", notification.tieu_de)
+        self.assertIn(reverse("admin_bookings"), notification.duong_dan)
+
+    def test_customer_cancellation_requires_reason_and_stays_in_history(self):
+        booking = DatSan.objects.create(
+            nguoi_dat=self.user,
+            san=self.court_1,
+            ngayBatDau=timezone.now().date() + timedelta(days=5),
+            gioBatDau=time(18, 0),
+            gioKetThuc=time(19, 0),
+            tongGiaTien=50000,
+        )
+        self.client.post(reverse("huy_yeu_cau_dat_san", args=[booking.id]), {"ly_do_huy": "Thay đổi lịch cá nhân"})
+        booking.refresh_from_db()
+        self.assertEqual(booking.trangThai, "cancelled")
+        self.assertEqual(booking.ly_do_huy, "Thay đổi lịch cá nhân")
+        history = self.client.get(reverse("lich_su_dat_san"))
+        self.assertContains(history, "Thay đổi lịch cá nhân")
+        self.assertContains(history, "card-cancelled")
+        self.client.post(reverse("xoa_yeu_cau_dat_san", args=[booking.id]))
+        self.assertTrue(DatSan.objects.filter(id=booking.id).exists())
+
+    def test_manager_cancellation_reason_is_returned_to_customer(self):
+        booking = DatSan.objects.create(
+            nguoi_dat=self.user,
+            san=self.court_1,
+            ngayBatDau=timezone.now().date() + timedelta(days=5),
+            gioBatDau=time(18, 0),
+            gioKetThuc=time(19, 0),
+            tongGiaTien=50000,
+        )
+        self.client.force_login(self.admin)
+        self.client.post(
+            reverse("admin_booking_action", args=[booking.id]),
+            {"action": "cancel", "ly_do_huy": "Sân bảo trì đột xuất"},
+        )
+        booking.refresh_from_db()
+        self.assertEqual(booking.ly_do_huy, "Sân bảo trì đột xuất")
+        customer_notice = ThongBao.objects.get(nguoi_nhan=self.user, tieu_de="Đơn đặt sân đã bị hủy")
+        self.assertIn("Sân bảo trì đột xuất", customer_notice.noi_dung)
 
     def test_fixed_booking_deposit_is_ten_thousand_per_booked_day(self):
         group_id = uuid.uuid4()
@@ -655,7 +719,7 @@ class BookingSupportInvoiceTests(TestCase):
         booking.refresh_from_db()
         self.assertFalse(booking.khach_xac_nhan_chuyen_khoan)
 
-    def test_admin_console_bulk_deletes_selected_bookings(self):
+    def test_admin_console_bulk_requests_payment_for_selected_bookings(self):
         self.client.force_login(self.admin)
         booking_1 = DatSan.objects.create(
             nguoi_dat=self.user,
@@ -678,11 +742,148 @@ class BookingSupportInvoiceTests(TestCase):
 
         response = self.client.post(
             reverse("admin_booking_bulk_action"),
-            {"action": "delete", "booking_ids": [booking_1.id, booking_2.id]},
+            {"action": "request_payment", "booking_ids": [booking_1.id, booking_2.id]},
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertFalse(DatSan.objects.filter(id__in=[booking_1.id, booking_2.id]).exists())
+        booking_1.refresh_from_db()
+        booking_2.refresh_from_db()
+        self.assertTrue(booking_1.yeu_cau_thanh_toan)
+        self.assertTrue(booking_2.yeu_cau_thanh_toan)
+
+    def test_admin_console_bulk_delete_requires_confirmation_and_deletes_all_states(self):
+        self.client.force_login(self.admin)
+        bookings = [
+            DatSan.objects.create(
+                nguoi_dat=self.user,
+                san=self.court_1,
+                ngayBatDau=timezone.now().date() + timedelta(days=index + 5),
+                gioBatDau=time(18, 0),
+                gioKetThuc=time(19, 0),
+                tongGiaTien=50000,
+                trangThai=status,
+            )
+            for index, status in enumerate(("pending", "cancelled", "confirmed"))
+        ]
+        booking_ids = [booking.id for booking in bookings]
+
+        response = self.client.post(
+            reverse("admin_booking_bulk_action"),
+            {"action": "delete", "booking_ids": booking_ids},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(DatSan.objects.filter(id__in=booking_ids).count(), 3)
+
+        response = self.client.post(
+            reverse("admin_booking_bulk_action"),
+            {
+                "action": "delete",
+                "booking_ids": booking_ids,
+                "delete_confirmed": "yes",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(DatSan.objects.filter(id__in=booking_ids).exists())
+
+    @patch.dict(os.environ, {"AI_SUPPORT_ENABLED": "False"}, clear=False)
+    def test_ten_customers_can_use_core_booking_payment_and_cancellation_flows(self):
+        customers = [
+            NguoiDung.objects.create_user(
+                username=f"09100000{index:02d}",
+                sodienthoai=f"09100000{index:02d}",
+                ten=f"Khach Hang {index}",
+                password="Test@12345",
+            )
+            for index in range(10)
+        ]
+        booking_date = timezone.now().date() + timedelta(days=20)
+        active_booking_ids = []
+        cancelled_booking_ids = []
+
+        for index, customer in enumerate(customers):
+            self.client.force_login(customer)
+            for page in ("home", "dien_dan", "lich_cong_dong", "lich_su_dat_san"):
+                self.assertEqual(self.client.get(reverse(page)).status_code, 200)
+            support_response = self.client.post(
+                reverse("support_widget_send"),
+                {"message": f"Can ho tro tai khoan {index}", "force_admin": "1"},
+            )
+            self.assertEqual(support_response.status_code, 200)
+
+            response = self.post_booking(
+                self.court_1,
+                booking_date + timedelta(days=index),
+                start="18:00",
+                end="19:00",
+            )
+            self.assertRedirects(response, reverse("lich_su_dat_san"))
+            booking = DatSan.objects.get(nguoi_dat=customer)
+            self.assertEqual(booking.trangThai, "pending")
+
+            if index % 2 == 0:
+                response = self.client.post(
+                    reverse("huy_yeu_cau_dat_san", args=[booking.id]),
+                    {"ly_do_huy": f"Khach {index} thay doi lich"},
+                )
+                self.assertRedirects(response, reverse("lich_su_dat_san"))
+                booking.refresh_from_db()
+                self.assertEqual(booking.trangThai, "cancelled")
+                self.assertTrue(booking.ly_do_huy)
+                cancelled_booking_ids.append(booking.id)
+            else:
+                active_booking_ids.append(booking.id)
+
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("admin_booking_bulk_action"),
+            {"action": "request_payment", "booking_ids": active_booking_ids},
+        )
+        self.assertEqual(response.status_code, 302)
+
+        for customer, booking_id in zip(customers[1::2], active_booking_ids):
+            self.client.force_login(customer)
+            response = self.client.post(reverse("mo_yeu_cau_dat_coc", args=[booking_id]))
+            self.assertRedirects(response, reverse("chi_tiet_dat_coc", args=[booking_id]))
+            self.assertEqual(self.client.get(reverse("chi_tiet_dat_coc", args=[booking_id])).status_code, 200)
+            response = self.client.post(reverse("xac_nhan_da_chuyen_khoan", args=[booking_id]))
+            self.assertRedirects(response, reverse("lich_su_dat_san"))
+
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("admin_booking_bulk_action"),
+            {"action": "mark_transfer_received", "booking_ids": active_booking_ids},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            DatSan.objects.filter(id__in=active_booking_ids, trangThai="confirmed", daThanhToan=True).count(),
+            5,
+        )
+        self.assertEqual(
+            DatSan.objects.filter(id__in=cancelled_booking_ids, trangThai="cancelled").count(),
+            5,
+        )
+
+    def test_select_all_controls_remain_available_after_filtering(self):
+        self.client.force_login(self.admin)
+        booking = DatSan.objects.create(
+            nguoi_dat=self.user,
+            san=self.court_1,
+            ngayBatDau=timezone.now().date() + timedelta(days=5),
+            gioBatDau=time(18, 0),
+            gioKetThuc=time(19, 0),
+            tongGiaTien=50000,
+            trangThai="pending",
+        )
+        response = self.client.get(reverse("admin_bookings"), {"status": "pending", "q": booking.sdt})
+        self.assertContains(response, 'id="selectAllBookings"')
+        self.assertContains(response, f'value="{booking.id}" form="bulkBookingForm"')
+        self.assertContains(response, "Gửi yêu cầu cọc")
+        self.assertContains(response, "Xác nhận cọc & duyệt")
+        self.assertContains(response, "Hủy đã chọn")
+        self.assertContains(response, "Xóa đã chọn")
+        self.assertContains(response, 'name="delete_confirmed"')
+        self.assertContains(response, "Xác nhận lần 1")
+        self.assertContains(response, "Xác nhận lần 2")
 
     def test_admin_console_support_reply_updates_message(self):
         self.client.force_login(self.admin)

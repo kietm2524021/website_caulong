@@ -1,4 +1,6 @@
 import os
+import re
+import unicodedata
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -245,12 +247,25 @@ class DatSan(models.Model):
     )
 
     def tao_noi_dung_chuyen_khoan(self):
-        if not (self.ngayBatDau and self.gioBatDau and self.gioKetThuc and self.san_id):
+        if not (self.ngayBatDau and self.san_id):
             return ""
-        ngay = self.ngayBatDau.strftime("%d/%m/%Y")
-        gio = f"{self.gioBatDau.strftime('%H:%M')}-{self.gioKetThuc.strftime('%H:%M')}"
-        ten = self.tenNguoiDat or (self.nguoi_dat.ten if self.nguoi_dat_id else "")
-        return f"{ngay}-{gio}-{self.san.tenSan}-{ten}".strip("-")
+
+        ten_khach = self.tenNguoiDat or (self.nguoi_dat.ten if self.nguoi_dat else "KHACH")
+        ten_san = self.san.tenSan
+        ngay_format = self.ngayBatDau.strftime("%d%m%y")
+        tien_coc = int(self.so_tien_coc or 0)
+
+        def normalize_part(value):
+            normalized = unicodedata.normalize(
+                "NFD", str(value).replace("đ", "d").replace("Đ", "D")
+            )
+            without_accents = "".join(
+                char for char in normalized if unicodedata.category(char) != "Mn"
+            )
+            return re.sub(r"[^A-Za-z0-9]+", "", without_accents).upper()
+
+        parts = ("DATCOC", ten_khach, ten_san, ngay_format, tien_coc)
+        return "-".join(normalize_part(part) for part in parts)
 
     def tinh_tien_coc_mac_dinh(self):
         if self.loaiDatSan == 1:

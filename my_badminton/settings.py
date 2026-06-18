@@ -96,6 +96,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "members.context_processors.site_config",
             ],
+            "builtins": ["members.templatetags.vietnamese_numbers"],
         },
     },
 ]

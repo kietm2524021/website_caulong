@@ -9,35 +9,35 @@
 <div class="stat-grid mb-3">
     <div class="stat-box">
         <div class="stat-label">Lịch hôm nay</div>
-        <div class="stat-value">{{ stats.today_bookings|intcomma }}</div>
+        <div class="stat-value">{{ stats.today_bookings|dotsep }}</div>
     </div>
     <div class="stat-box">
         <div class="stat-label">Đơn chờ duyệt</div>
-        <div class="stat-value">{{ stats.pending_bookings|intcomma }}</div>
+        <div class="stat-value">{{ stats.pending_bookings|dotsep }}</div>
     </div>
     <div class="stat-box">
         <div class="stat-label">Chưa thanh toán</div>
-        <div class="stat-value">{{ stats.unpaid_bookings|intcomma }}</div>
+        <div class="stat-value">{{ stats.unpaid_bookings|dotsep }}</div>
     </div>
     <div class="stat-box">
         <div class="stat-label">Doanh thu tháng</div>
-        <div class="stat-value">{{ stats.month_revenue|intcomma }}đ</div>
+        <div class="stat-value">{{ stats.month_revenue|dotsep }}đ</div>
     </div>
     <div class="stat-box">
         <div class="stat-label">Sân hoạt động</div>
-        <div class="stat-value">{{ stats.active_courts|intcomma }}</div>
+        <div class="stat-value">{{ stats.active_courts|dotsep }}</div>
     </div>
     <div class="stat-box">
         <div class="stat-label">Bài chờ duyệt</div>
-        <div class="stat-value">{{ stats.pending_posts|intcomma }}</div>
+        <div class="stat-value">{{ stats.pending_posts|dotsep }}</div>
     </div>
     <div class="stat-box">
         <div class="stat-label">Tin hỗ trợ mới</div>
-        <div class="stat-value">{{ stats.unread_support|intcomma }}</div>
+        <div class="stat-value">{{ stats.unread_support|dotsep }}</div>
     </div>
     <div class="stat-box">
         <div class="stat-label">Khách hàng</div>
-        <div class="stat-value">{{ stats.customers|intcomma }}</div>
+        <div class="stat-value">{{ stats.customers|dotsep }}</div>
     </div>
 </div>
 
@@ -150,7 +150,7 @@
                         {% endif %}
                         <br><span class="muted small">{{ booking.gioBatDau|date:"H:i" }} - {{ booking.gioKetThuc|date:"H:i" }}</span>
                     </td>
-                    <td>{{ booking.admin_group_total|floatformat:0|intcomma }}đ</td>
+                    <td>{{ booking.admin_group_total|dotsep }}đ</td>
                     <td><span class="status-pill st-{{ booking.trangThai }}">{{ booking.get_trangThai_display }}</span></td>
                     <td class="text-end">
                         <a class="btn btn-outline-secondary btn-icon" href="{% url 'xuat_hoa_don' booking.id %}" title="Hóa đơn">

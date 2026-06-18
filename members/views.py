@@ -313,6 +313,7 @@ def dat_san_view(request):
                         trinh_do_can=data.get('trinh_do_can'),
                         ghi_chu_tuyen=data.get('ghi_chu_tuyen', ''),
                     )
+                    don.so_tien_coc = don.tinh_tien_coc_mac_dinh()
                     don.noi_dung_chuyen_khoan = don.tao_noi_dung_chuyen_khoan()
                     objs.append(don)
 
@@ -324,7 +325,8 @@ def dat_san_view(request):
                     link=f"{reverse('admin_bookings')}?q={request.user.sodienthoai}",
                     branch=san.maChiNhanh,
                 )
-                messages.success(request, f"Đã gửi yêu cầu cho {len(objs)} buổi cố định. Tổng tạm tính: {int(tien_co_dinh * len(objs)):,}đ")
+                total_label = f"{int(tien_co_dinh * len(objs)):,}".replace(",", ".")
+                messages.success(request, f"Đã gửi yêu cầu cho {len(objs)} buổi cố định. Tổng tạm tính: {total_label}đ")
                 return redirect('lich_su_dat_san')
     else:
         form = DatSanForm(initial={'san': san_chon, 'loaiDatSan': 0})
@@ -381,6 +383,7 @@ def lich_su_dat_san(request):
                 'trang_thai': item.trangThai,
                 'lich_tap': item.get_lich_tap_display(),
                 'noi_dung_chuyen_khoan': item.noi_dung_chuyen_khoan,
+                'ly_do_huy': item.ly_do_huy,
                 'trang_thai_coc': item.trang_thai_coc,
                 'so_tien_coc': total_deposit,
                 'so_tien_con_lai': max(total_money - total_deposit, Decimal('0')),
@@ -444,11 +447,24 @@ def huy_yeu_cau_dat_san(request, booking_id):
     if booking.trangThai != 'pending':
         messages.error(request, "Chỉ có thể hủy đơn đang chờ duyệt.")
         return redirect('lich_su_dat_san')
+    try:
+        reason = normalize_plain_text(request.POST.get('ly_do_huy'), max_length=500, field_label='Lý do hủy')
+    except Exception as exc:
+        messages.error(request, exc.messages[0] if hasattr(exc, 'messages') else "Vui lòng nhập lý do hủy đơn.")
+        return redirect(request.META.get('HTTP_REFERER') or 'lich_su_dat_san')
     booking_target_queryset(booking).update(
         trangThai='cancelled',
         yeu_cau_thanh_toan=False,
         ngay_khach_mo_thanh_toan=None,
         khach_xac_nhan_chuyen_khoan=False,
+        ly_do_huy=reason,
+    )
+    notify_admins(
+        title=f"{booking.tenNguoiDat} đã hủy yêu cầu đặt sân",
+        message=f"{booking.san.tenSan}, ngày {booking.ngayBatDau:%d/%m/%Y}. Lý do: {reason}",
+        category="booking",
+        link=f"{reverse('admin_bookings')}?q={booking.sdt}",
+        branch=booking.san.maChiNhanh,
     )
     messages.success(request, "Đã gửi yêu cầu hủy đơn đặt sân.")
     return redirect('lich_su_dat_san')
@@ -458,8 +474,8 @@ def huy_yeu_cau_dat_san(request, booking_id):
 @require_POST
 def xoa_yeu_cau_dat_san(request, booking_id):
     booking = get_object_or_404(DatSan, id=booking_id, nguoi_dat=request.user)
-    if booking.trangThai not in {'pending', 'cancelled'}:
-        messages.error(request, "Chỉ có thể xóa đơn chưa hoàn tất hoặc đã hủy.")
+    if booking.trangThai != 'pending':
+        messages.error(request, "Đơn đã hủy hoặc đã xử lý phải được giữ lại trong lịch sử.")
         return redirect('lich_su_dat_san')
     booking_target_queryset(booking).delete()
     messages.success(request, "Đã xóa yêu cầu đặt sân khỏi danh sách.")
@@ -481,16 +497,13 @@ def xac_nhan_da_chuyen_khoan(request, booking_id):
         khach_xac_nhan_chuyen_khoan=True,
         ngay_khach_xac_nhan_ck=timezone.now(),
     )
-    manager = NguoiDung.objects.filter(
-        chi_nhanh_quan_ly_id=booking.san.maChiNhanh_id,
-        role__in=['manager', 'staff'],
-    ).order_by('-is_staff', 'id').first()
-    if manager:
-        ThongBao.objects.create(
-            nguoi_nhan=manager,
-            tieu_de="Khách đã xác nhận chuyển khoản",
-            noi_dung=f"{booking.tenNguoiDat} đã bấm xác nhận chuyển khoản cho sân {booking.san.tenSan} ngày {booking.ngayBatDau:%d/%m/%Y}.",
-        )
+    notify_admins(
+        title=f"{booking.tenNguoiDat} đã xác nhận đặt cọc",
+        message=f"Sân {booking.san.tenSan}, ngày {booking.ngayBatDau:%d/%m/%Y}. Vui lòng đối soát và duyệt đơn.",
+        category="payment",
+        link=f"{reverse('admin_bookings')}?q={booking.sdt}",
+        branch=booking.san.maChiNhanh,
+    )
     messages.success(request, "Đã gửi xác nhận chuyển khoản đến quản lý. Đơn sẽ được duyệt sau khi đối soát.")
     return redirect('lich_su_dat_san')
 
@@ -706,7 +719,11 @@ def support_widget_state(request):
 @require_POST
 def support_widget_send(request):
     try:
-        payload = json.loads(request.body.decode('utf-8')) if request.body else request.POST
+        payload = (
+            json.loads(request.body.decode('utf-8'))
+            if request.content_type == 'application/json' and request.body
+            else request.POST
+        )
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Dữ liệu gửi không hợp lệ.'}, status=400)
 
