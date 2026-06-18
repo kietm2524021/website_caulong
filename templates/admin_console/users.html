@@ -1,0 +1,121 @@
+{% extends 'admin_console/base.html' %}
+{% load humanize %}
+
+{% block title %}Quản Lý Người Dùng{% endblock %}
+{% block page_title %}Người dùng & phân quyền{% endblock %}
+{% block page_subtitle %}{% if can_manage_users %}Tìm tài khoản, cập nhật vai trò, chi nhánh quản lý và nhóm quyền{% else %}Xem khách hàng và nhân sự thuộc chi nhánh đang quản lý{% endif %}{% endblock %}
+
+{% block content %}
+<section class="panel mb-3">
+    <div class="panel-body">
+        <form method="get" class="tool-row">
+            <div>
+                <label class="form-label small fw-bold">Từ khóa</label>
+                <input class="form-control" name="q" value="{{ request.GET.q }}" placeholder="Tên, SĐT, username">
+            </div>
+            <div>
+                <label class="form-label small fw-bold">Vai trò</label>
+                <select class="form-select" name="role">
+                    <option value="">Tất cả</option>
+                    {% for value,label in role_choices %}
+                        <option value="{{ value }}" {% if request.GET.role == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button class="btn btn-primary btn-admin" type="submit"><i class="fa-solid fa-magnifying-glass me-1"></i> Tìm</button>
+            <a class="btn btn-outline-secondary btn-admin" href="{% url 'admin_users' %}">Xóa lọc</a>
+        </form>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-header">
+        <h2 class="panel-title">Danh sách tài khoản</h2>
+        <span class="muted small">{{ users.paginator.count|intcomma }} người dùng</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table-admin">
+            <thead>
+                <tr>
+                    <th>Người dùng</th>
+                    <th>Vai trò</th>
+                    <th>Chi nhánh quản lý</th>
+                    <th>Nhóm quyền</th>
+                    <th>Trạng thái</th>
+                    <th class="text-end">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in users %}
+                <tr>
+                    <form method="post" action="{% url 'admin_user_update' item.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <td>
+                            <strong>{{ item.ten|default:item.username }}</strong><br>
+                            <span class="muted small">{{ item.sodienthoai }} · tham gia {{ item.date_joined|date:"d/m/Y" }}</span>
+                        </td>
+                        <td>
+                            <select class="form-select form-select-sm" name="role" {% if not can_manage_users %}disabled{% endif %}>
+                                {% for value,label in role_choices %}
+                                    <option value="{{ value }}" {% if item.role == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td>
+                            <select class="form-select form-select-sm" name="chi_nhanh_quan_ly" {% if not can_manage_users %}disabled{% endif %}>
+                                <option value="">Không gán</option>
+                                {% for branch in branches %}
+                                    <option value="{{ branch.id }}" {% if item.chi_nhanh_quan_ly_id == branch.id %}selected{% endif %}>{{ branch.tenChiNhanh }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td style="min-width: 220px;">
+                            <select class="form-select form-select-sm" name="groups" multiple size="3" {% if not request.user.is_superuser or not can_manage_users %}disabled{% endif %}>
+                                {% for group in groups %}
+                                    <option value="{{ group.id }}" {% if group in item.groups.all %}selected{% endif %}>{{ group.name }}</option>
+                                {% endfor %}
+                            </select>
+                            {% if not request.user.is_superuser and can_manage_users %}
+                                <div class="muted small mt-1">Chỉ superuser được sửa nhóm quyền.</div>
+                            {% elif not can_manage_users %}
+                                <div class="muted small mt-1">Chỉ có quyền xem.</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="form-check form-switch mb-1">
+                                <input class="form-check-input" type="checkbox" name="is_active" {% if item.is_active %}checked{% endif %} {% if not can_manage_users %}disabled{% endif %}>
+                                <label class="form-check-label small">Hoạt động</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="is_staff" {% if item.is_staff %}checked{% endif %} {% if not request.user.is_superuser or not can_manage_users %}disabled{% endif %}>
+                                <label class="form-check-label small">Staff</label>
+                            </div>
+                            {% if can_manage_users %}
+                                <input class="form-control form-control-sm mt-2" type="password" name="new_password" placeholder="Mật khẩu mới">
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if can_manage_users %}
+                                <button class="btn btn-outline-primary btn-icon" type="submit" title="Lưu phân quyền">
+                                    <i class="fa-solid fa-floppy-disk"></i>
+                                </button>
+                                {% if item.id != request.user.id %}
+                                    <button class="btn btn-outline-danger btn-icon mt-1" type="submit" name="delete_user" value="1" title="Xóa tài khoản" onclick="return confirm('Xóa tài khoản này?');">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                {% endif %}
+                            {% else %}
+                                <span class="muted small">Chỉ xem</span>
+                            {% endif %}
+                        </td>
+                    </form>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6"><div class="empty-state">Không tìm thấy người dùng.</div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

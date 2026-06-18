@@ -1,0 +1,325 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Lịch Sân Trực Tuyến{% endblock %}
+
+{% block content %}
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<style>
+    /* 1. GLOBAL & VARS */
+    :root { --primary: #00b894; --secondary: #0984e3; --dark: #2d3436; --bg: #f1f2f6; --card-bg: #ffffff; }
+    body { font-family: 'Outfit', sans-serif; background-color: var(--bg); color: var(--dark); }
+
+    /* 2. HEADER SECTION */
+    .hero-header { background: linear-gradient(135deg, #0984e3 0%, #00b894 100%); padding: 40px 0 80px; color: white; border-radius: 0 0 40px 40px; text-align: center; }
+    .live-badge { background: rgba(231, 76, 60, 0.9); color: white; padding: 5px 15px; border-radius: 30px; font-weight: 800; font-size: 0.8rem; animation: pulse 2s infinite; display: inline-block; margin-bottom: 10px; }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    .clock-display { font-size: 3.5rem; font-weight: 800; text-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+
+    /* 3. FILTER BAR */
+    .filter-bar { background: white; border-radius: 16px; padding: 10px; margin-top: -40px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); display: flex; gap: 10px; max-width: 800px; margin-left: auto; margin-right: auto; position: relative; z-index: 10; }
+    .filter-input { border: none; background: #f8f9fa; padding: 12px; border-radius: 10px; width: 100%; outline: none; font-weight: 600; cursor: pointer; }
+    .filter-input:hover { background: #e9ecef; }
+
+    /* 4. GOM NHÓM (GROUPING STYLES) */
+    .branch-section { margin-top: 40px; margin-bottom: 20px; }
+    .branch-title { background: white; padding: 15px 25px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); display: inline-flex; align-items: center; gap: 10px; font-size: 1.3rem; font-weight: 800; color: var(--secondary); border-left: 5px solid var(--secondary); }
+    .court-section { margin-left: 15px; margin-top: 20px; border-left: 2px dashed #ccc; padding-left: 20px; }
+    .court-title { font-size: 1.1rem; font-weight: 700; color: var(--dark); margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+    .court-icon { width: 30px; height: 30px; background: #dfe6e9; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; }
+
+    /* 5. CARD TRẬN ĐẤU */
+    .match-card { 
+        background: white; border-radius: 16px; padding: 15px; margin-bottom: 15px; 
+        display: grid; grid-template-columns: 90px 1fr auto; gap: 20px; align-items: center; 
+        box-shadow: 0 3px 10px rgba(0,0,0,0.02); border: 1px solid transparent; transition: 0.2s; cursor: pointer;
+    }
+    .match-card:hover { transform: translateX(5px); border-color: var(--primary); box-shadow: 0 5px 20px rgba(0,0,0,0.08); }
+
+    .card-past { opacity: 0.6; filter: grayscale(1); background: #f9f9f9; }
+    .card-live { background: #f0fff4; border: 1px solid var(--primary); position: relative; }
+    .card-live::after { content: 'LIVE'; position: absolute; right: 0; top: 0; background: var(--primary); color: white; font-size: 0.6rem; padding: 2px 6px; border-radius: 0 0 0 8px; font-weight: bold; }
+
+    .time-box { text-align: center; background: #f1f2f6; padding: 10px; border-radius: 12px; }
+    .time-start { font-weight: 800; font-size: 1.1rem; color: var(--dark); }
+    .time-end { font-size: 0.8rem; color: #636e72; }
+
+    .user-info { font-weight: 600; color: #2d3436; font-size: 1rem; }
+    .type-badge { font-size: 0.65rem; padding: 3px 8px; border-radius: 6px; font-weight: 700; text-transform: uppercase; margin-left: 8px; }
+    .badge-fixed { background: #e3f2fd; color: #0984e3; }
+    .badge-flex { background: #fff3cd; color: #f39c12; }
+
+    /* RECRUITMENT STYLE */
+    .recruit-container { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+    .recruit-tag { display: inline-flex; align-items: center; gap: 5px; width: fit-content; background: #fff8e1; border: 1px dashed #ffb300; padding: 5px 12px; border-radius: 8px; font-size: 0.85rem; color: #856404; font-weight: 600; }
+    .recruit-note { font-size: 0.8rem; color: #636e72; font-style: italic; margin-left: 2px; display: flex; align-items: center; gap: 5px; }
+    
+    .btn-action { background: var(--secondary); color: white; border: none; padding: 3px 10px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; margin-left: 10px; transition: 0.2s; }
+    .btn-action:hover { background: #074b83; }
+    .btn-enable { background: white; border: 1px dashed #b2bec3; color: #636e72; padding: 5px 12px; border-radius: 8px; font-size: 0.8rem; margin-top: 5px; cursor: pointer; transition: 0.2s; }
+    .btn-enable:hover { border-color: var(--primary); color: var(--primary); background: #f0fff4; }
+
+    /* Custom Swal Inputs */
+    .swal2-input-group { text-align: left; margin-bottom: 15px; }
+    .swal2-label { display: block; font-size: 0.85rem; font-weight: 600; color: #2d3436; margin-bottom: 5px; }
+    
+    /* INFO TABLE IN POPUP */
+    .info-table { width: 100%; border-collapse: collapse; margin-top: 10px; text-align: left; font-size: 0.9rem; }
+    .info-table td { padding: 8px; border-bottom: 1px solid #eee; }
+    .info-table td:first-child { font-weight: 600; color: #636e72; width: 40%; }
+    .info-table td:last-child { font-weight: 700; color: var(--dark); }
+</style>
+
+<div class="hero-header">
+    <div class="container">
+        <span class="live-badge">LIVE SCHEDULE</span>
+        <div id="digitalClock" class="clock-display">--:--</div>
+        <p class="m-0 opacity-75 fw-bold">NGÀY {{ ngay_hien_tai|date:"d/m/Y" }}</p>
+    </div>
+</div>
+
+<div class="container">
+    <div class="filter-bar">
+        <form id="filterForm" method="get" class="d-flex w-100 gap-2">
+            <input type="text" id="datePicker" name="ngay" class="filter-input" placeholder="Chọn ngày..." value="{{ ngay_hien_tai|date:'Y-m-d' }}">
+            <select name="san" class="filter-input" onchange="this.form.submit()">
+                <option value="">Xem toàn bộ hệ thống</option>
+                {% regroup ds_san by maChiNhanh as cn_list %}
+                {% for cn in cn_list %}
+                    <optgroup label="{{ cn.grouper }}">
+                        {% for s in cn.list %}
+                            <option value="{{ s.id }}" {% if san_dang_chon == s.id %}selected{% endif %}>{{ s.tenSan }}</option>
+                        {% endfor %}
+                    </optgroup>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
+    <div class="pb-5">
+        {% if ds_dat_cho %}
+            
+            {% regroup ds_dat_cho by san.maChiNhanh as branch_list %}
+            
+            {% for branch in branch_list %}
+            <div class="branch-section animate__animated animate__fadeInUp">
+                <div class="branch-title"><i class="fa-solid fa-building"></i> {{ branch.grouper }}</div>
+
+                {% regroup branch.list by san as court_list %}
+                
+                {% for court in court_list %}
+                <div class="court-section">
+                    <div class="court-title">
+                        <div class="court-icon"><i class="fa-solid fa-table-tennis"></i></div>
+                        {{ court.grouper.tenSan }}
+                    </div>
+
+                    {% for slot in court.list %}
+                    <div class="match-card timeline-item" 
+                        data-date="{{ slot.ngayBatDau|date:'Y-m-d' }}" 
+                         data-start="{{ slot.gioBatDau|time:'H:i' }}" 
+                         data-end="{{ slot.gioKetThuc|time:'H:i' }}"
+                         onclick="showBookingDetails(
+                             '{{ slot.tenNguoiDat|default:'Ẩn danh'|escapejs }}',
+                             '{{ slot.sdt|escapejs }}',
+                             '{{ slot.gioBatDau|time:'H:i' }} - {{ slot.gioKetThuc|time:'H:i' }}',
+                             '{{ slot.san.tenSan|escapejs }}',
+                             '{{ slot.tuyenThanhVien }}',
+                             '{{ slot.soLuongTuyen }}',
+                             '{{ slot.get_trinh_do_can_display|escapejs }}',
+                             '{{ slot.ghi_chu_tuyen|default:'Không có ghi chú'|escapejs }}'
+                         )">
+                        
+                        <div class="time-box">
+                            <div class="time-start">{{ slot.gioBatDau|time:"H:i" }}</div>
+                            <div class="time-end">{{ slot.gioKetThuc|time:"H:i" }}</div>
+                        </div>
+
+                        <div>
+                            <div class="user-info">
+                                <i class="fa-solid fa-user-circle text-muted me-1"></i>
+                                {% if slot.nguoi_dat == request.user %}
+                                    <span class="text-success fw-bold">Bạn ({{ slot.tenNguoiDat }})</span>
+                                {% else %}
+                                    {{ slot.tenNguoiDat|default:"Ẩn danh" }}
+                                {% endif %}
+
+                                {% if slot.loaiDatSan == 1 %}
+                                    <span class="type-badge badge-fixed">CỐ ĐỊNH</span>
+                                {% else %}
+                                    <span class="type-badge badge-flex">VÃNG LAI</span>
+                                {% endif %}
+                            </div>
+
+                            {% if slot.tuyenThanhVien %}
+                                <div class="recruit-container">
+                                    <div class="recruit-tag">
+                                        <i class="fa-solid fa-users-rays text-warning"></i> 
+                                        Cần {{ slot.soLuongTuyen }} người • {{ slot.get_trinh_do_can_display }}
+                                        
+                                        {% if slot.nguoi_dat == request.user %}
+                                            <button class="btn-action" onclick="event.stopPropagation(); editRecruitment('{{ slot.id }}', '{{ slot.soLuongTuyen }}', '{{ slot.trinh_do_can|escapejs }}', '{{ slot.ghi_chu_tuyen|default:''|escapejs }}', true)">
+                                                <i class="fa-solid fa-pen"></i> Sửa
+                                            </button>
+                                        {% endif %}
+                                    </div>
+                                    {% if slot.ghi_chu_tuyen %}
+                                        <div class="recruit-note"><i class="fa-solid fa-quote-left text-muted" style="font-size: 0.6rem;"></i> {{ slot.ghi_chu_tuyen }}</div>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                {% if slot.nguoi_dat == request.user %}
+                                    <button class="btn-enable" onclick="event.stopPropagation(); editRecruitment('{{ slot.id }}', 0, 'tb', '', false)">
+                                        <i class="fa-solid fa-plus-circle"></i> Tìm người giao lưu?
+                                    </button>
+                                {% endif %}
+                            {% endif %}
+                        </div>
+
+                        <div class="text-end d-none d-md-block">
+                            {% if slot.trangThai == 'confirmed' %}
+                                <div class="text-success fw-bold small"><i class="fa-solid fa-check-circle"></i> ĐÃ DUYỆT</div>
+                            {% else %}
+                                <div class="text-warning fw-bold small"><i class="fa-solid fa-clock"></i> CHỜ DUYỆT</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %} 
+                </div>
+                {% endfor %} 
+            </div>
+            {% endfor %} 
+
+        {% else %}
+            <div class="text-center py-5 mt-5">
+                <img src="https://cdn-icons-png.flaticon.com/512/7486/7486747.png" width="80" class="mb-3 opacity-25">
+                <h5 class="fw-bold text-muted">Chưa có lịch đặt nào hôm nay</h5>
+                <a href="{% url 'dat_san' %}" class="btn btn-primary rounded-pill mt-2">Đặt sân ngay</a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    // 1. DATE CONFIG
+    const today = new Date();
+    const maxDate = new Date(); maxDate.setMonth(maxDate.getMonth() + 3);
+    flatpickr("#datePicker", { dateFormat: "Y-m-d", minDate: "today", maxDate: maxDate, disableMobile: "true", onChange: function() { document.getElementById('filterForm').submit(); } });
+
+    // 2. REALTIME & AUTO REFRESH
+    function updateSystem() {
+    const now = new Date();
+    
+    // Cập nhật đồng hồ hiển thị
+    document.getElementById('digitalClock').innerText = now.toLocaleTimeString('vi-VN', {hour12: false, hour:'2-digit', minute:'2-digit'});
+    
+    // Lấy chuỗi ngày hiện tại (YYYY-MM-DD) để so sánh
+    const todayStr = now.toISOString().split('T')[0];
+    const currentMin = now.getHours() * 60 + now.getMinutes();
+
+    document.querySelectorAll('.timeline-item').forEach(item => {
+        const matchDate = item.dataset.date; // Ngày của trận đấu
+        const startParts = item.dataset.start.split(':');
+        const endParts = item.dataset.end.split(':');
+        
+        const startMin = parseInt(startParts[0]) * 60 + parseInt(startParts[1]);
+        const endMin = parseInt(endParts[0]) * 60 + parseInt(endParts[1]);
+
+        // Xóa sạch class cũ trước khi tính toán lại
+        item.classList.remove('card-past', 'card-live');
+
+        if (matchDate < todayStr) {
+            // 1. Nếu ngày trận đấu là ngày hôm qua hoặc cũ hơn -> Mờ chắc chắn
+            item.classList.add('card-past');
+        } 
+        else if (matchDate > todayStr) {
+            // 2. Nếu ngày trận đấu là ngày mai hoặc tương lai -> Để sáng rõ (không làm gì)
+            return; 
+        } 
+        else {
+            // 3. Nếu trận đấu diễn ra TRONG NGÀY HÔM NAY -> Mới xét đến giờ/phút
+            if (currentMin >= startMin && currentMin < endMin) {
+                item.classList.add('card-live'); // Đang đánh
+            }
+            else if (currentMin >= endMin) {
+                item.classList.add('card-past'); // Đã đánh xong
+            }
+        }
+    });
+}
+    setInterval(() => { if (!Swal.isVisible()) location.reload(); }, 60000);
+    setInterval(updateSystem, 1000); updateSystem();
+
+    // 3. EDIT RECRUITMENT
+    function editRecruitment(bookingId, currentCount, currentLevel, currentNote, isEnabled) {
+        Swal.fire({
+            title: isEnabled ? 'Sửa thông tin tuyển' : 'Đăng tin tìm người',
+            html: `<div class="text-start"><div class="swal2-input-group"><label class="swal2-label">Số lượng cần (Nhập 0 để TẮT):</label><input type="number" id="swal-count" class="form-control" value="${currentCount > 0 ? currentCount : 1}" min="0" max="10"></div><div class="swal2-input-group"><label class="swal2-label">Trình độ mong muốn:</label><select id="swal-level" class="form-select"><option value="yeu" ${currentLevel == 'yeu' ? 'selected' : ''}>Yếu / Mới chơi</option><option value="tb" ${currentLevel == 'tb' ? 'selected' : ''}>Trung bình</option><option value="kha" ${currentLevel == 'kha' ? 'selected' : ''}>Khá</option><option value="gioi" ${currentLevel == 'gioi' ? 'selected' : ''}>Giỏi / Chuyên nghiệp</option></select></div><div class="swal2-input-group"><label class="swal2-label">Ghi chú (Kèo/Phí):</label><input type="text" id="swal-note" class="form-control" value="${currentNote}" placeholder="VD: Chia đều tiền sân..."></div></div>`,
+            showCancelButton: true, confirmButtonText: 'Lưu thay đổi', confirmButtonColor: '#00b894', cancelButtonText: 'Hủy',
+            preConfirm: () => {
+                const count = document.getElementById('swal-count').value;
+                const level = document.getElementById('swal-level').value;
+                const note = document.getElementById('swal-note').value;
+                if(count < 0 || count > 10) Swal.showValidationMessage('Số lượng từ 0-10');
+                return { count: parseInt(count), level: level, note: note };
+            }
+        }).then((result) => {
+            if(result.isConfirmed) {
+                const data = result.value;
+                fetch("{% url 'update_recruitment' %}", {
+                    method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+                    body: JSON.stringify({ id: bookingId, count: data.count, enable: data.count > 0, trinh_do: data.level, ghi_chu: data.note })
+                }).then(r => r.json()).then(data => {
+                    if(data.status === 'success') { Swal.fire({icon:'success', title:'Thành công', timer:1000, showConfirmButton:false}).then(()=>location.reload()); }
+                    else Swal.fire('Lỗi', data.message, 'error');
+                });
+            }
+        });
+    }
+
+    // 4. SHOW BOOKING DETAILS POPUP (NEW)
+    function showBookingDetails(name, sdt, time, san, isRecruiting, count, level, note) {
+        // Chỉ hiển thị SĐT đầy đủ cho chính chủ, người khác che đi
+        let displaySdt = sdt.length > 3 ? sdt.substring(0, sdt.length - 3) + "***" : "***";
+        
+        let recruitHtml = '';
+        if(isRecruiting === 'True') {
+            recruitHtml = `
+                <tr style="background: #fff8e1;">
+                    <td><i class="fa-solid fa-users-rays text-warning me-2"></i>Tuyển thêm</td>
+                    <td class="text-warning">${count} người</td>
+                </tr>
+                <tr style="background: #fff8e1;">
+                    <td><i class="fa-solid fa-layer-group text-warning me-2"></i>Trình độ</td>
+                    <td>${level}</td>
+                </tr>
+                <tr style="background: #fff8e1;">
+                    <td><i class="fa-solid fa-note-sticky text-warning me-2"></i>Ghi chú</td>
+                    <td>${note}</td>
+                </tr>
+            `;
+        }
+
+        Swal.fire({
+            title: `<span style="font-weight:800; color:#2d3436;">Chi tiết đặt sân</span>`,
+            html: `
+                <div class="text-center mb-3">
+                    <div style="font-size: 1.2rem; font-weight: 700; color: #00b894;">${san}</div>
+                    <div class="text-muted small">${time}</div>
+                </div>
+                <table class="info-table">
+                    <tr><td>Người đặt</td><td>${name}</td></tr>
+                    <tr><td>Liên hệ</td><td>${displaySdt}</td></tr>
+                    ${recruitHtml}
+                </table>
+            `,
+            confirmButtonText: 'Đóng',
+            confirmButtonColor: '#636e72'
+        });
+    }
+</script>
+{% endblock %}

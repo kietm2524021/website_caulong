@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Chi Tiết Đặt Cọc{% endblock %}
+
+{% block content %}
+<style>
+    .deposit-page { min-height: 75vh; padding: 48px 0; background: linear-gradient(180deg, #f0fdfa 0%, #f8fafc 45%); }
+    .deposit-shell { max-width: 920px; margin: 0 auto; }
+    .deposit-back { color: #64748b; text-decoration: none; font-weight: 700; display: inline-flex; gap: 8px; align-items: center; margin-bottom: 18px; }
+    .deposit-card { background: #fff; border: 1px solid #dbe3ee; border-radius: 24px; overflow: hidden; box-shadow: 0 24px 60px rgba(15, 23, 42, .10); }
+    .deposit-head { padding: 24px 28px; color: #fff; background: linear-gradient(135deg, #0f766e, #0d9488); display: flex; justify-content: space-between; gap: 20px; align-items: center; }
+    .deposit-head h1 { font-size: 1.35rem; font-weight: 800; margin: 0 0 5px; }
+    .deposit-head p { margin: 0; opacity: .82; font-size: .85rem; }
+    .countdown-wrap { text-align: center; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.25); border-radius: 14px; padding: 10px 16px; min-width: 145px; }
+    .countdown-label { display: block; font-size: .68rem; text-transform: uppercase; font-weight: 800; opacity: .8; }
+    .payment-countdown { display: block; font-size: 1.45rem; line-height: 1.2; font-weight: 800; letter-spacing: 2px; margin-top: 3px; }
+    .deposit-body { display: grid; grid-template-columns: 300px 1fr; gap: 30px; padding: 30px; }
+    .qr-panel { text-align: center; padding: 22px; border-radius: 18px; background: #f8fafc; border: 1px solid #e2e8f0; }
+    .qr-image { width: 220px; height: 220px; max-width: 100%; object-fit: contain; padding: 8px; background: #fff; border-radius: 14px; border: 1px solid #dbe3ee; }
+    .qr-empty { width: 220px; height: 220px; max-width: 100%; margin: auto; border-radius: 14px; border: 1px dashed #cbd5e1; color: #64748b; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .deposit-amount { color: #0f766e; font-size: 1.8rem; font-weight: 800; margin: 5px 0 18px; }
+    .info-row { display: grid; grid-template-columns: 145px 1fr; gap: 14px; padding: 11px 0; border-bottom: 1px solid #edf1f7; }
+    .info-label { color: #64748b; font-size: .78rem; font-weight: 700; }
+    .info-value { color: #1e293b; font-size: .88rem; font-weight: 800; word-break: break-word; }
+    .transfer-content { margin-top: 18px; padding: 15px; border-radius: 14px; background: #eff6ff; border: 1px solid #bfdbfe; }
+    .transfer-content code { display: block; margin-top: 6px; color: #1d4ed8; font-family: inherit; font-size: .9rem; font-weight: 800; word-break: break-word; }
+    .deposit-note { margin-top: 14px; color: #64748b; font-size: .78rem; line-height: 1.55; }
+    .deposit-actions { padding: 20px 30px; border-top: 1px solid #edf1f7; background: #f8fafc; display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+    .deposit-btn { border: 0; border-radius: 12px; padding: 11px 18px; font-size: .82rem; font-weight: 800; display: inline-flex; align-items: center; gap: 8px; }
+    .deposit-btn.confirm { color: #fff; background: #0f766e; }
+    .deposit-btn.cancel { color: #b91c1c; background: #fee2e2; }
+    .deposit-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .expired-alert { margin: 0 30px 24px; padding: 12px 14px; border-radius: 12px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; font-weight: 700; }
+    @media (max-width: 760px) {
+        .deposit-page { padding: 24px 12px; }
+        .deposit-head { align-items: flex-start; flex-direction: column; }
+        .countdown-wrap { width: 100%; }
+        .deposit-body { grid-template-columns: 1fr; padding: 20px; }
+        .info-row { grid-template-columns: 1fr; gap: 4px; }
+        .deposit-actions { padding: 16px 20px; }
+    }
+</style>
+
+<main class="deposit-page">
+    <div class="container deposit-shell">
+        <a class="deposit-back" href="{% url 'lich_su_dat_san' %}"><i class="fa-solid fa-arrow-left"></i> Trở lại Lịch sử đặt sân</a>
+        <section class="deposit-card">
+            <header class="deposit-head">
+                <div>
+                    <h1>Chi tiết thanh toán tiền cọc</h1>
+                    <p>Đơn #{{ booking.id }} · {{ booking.san.tenSan }} · {{ booking.ngayBatDau|date:"d/m/Y" }}</p>
+                </div>
+                <div class="countdown-wrap">
+                    <span class="countdown-label">Thời gian còn lại</span>
+                    <span class="payment-countdown" data-deadline="{{ han_thanh_toan|date:'c' }}">{% if het_han %}Đã hết hạn{% else %}15:00{% endif %}</span>
+                </div>
+            </header>
+
+            <div class="deposit-body">
+                <div class="qr-panel">
+                    {% if booking.san.maChiNhanh.qr_thanh_toan %}
+                        <img class="qr-image" src="{{ booking.san.maChiNhanh.qr_thanh_toan.url }}" alt="Mã QR thanh toán tiền cọc">
+                    {% else %}
+                        <div class="qr-empty">Chi nhánh chưa cập nhật mã QR. Vui lòng chuyển khoản theo thông tin bên cạnh.</div>
+                    {% endif %}
+                    <div class="small text-muted mt-3">Số tiền cần đặt cọc</div>
+                    <div class="deposit-amount">{{ so_tien_coc|intcomma }}đ</div>
+                    <div class="small text-muted">Tổng tiền: {{ tong_tien|intcomma }}đ<br>Còn lại: {{ so_tien_con_lai|intcomma }}đ</div>
+                </div>
+
+                <div>
+                    <div class="info-row"><span class="info-label">Chi nhánh</span><span class="info-value">{{ booking.san.maChiNhanh.tenChiNhanh }}</span></div>
+                    <div class="info-row"><span class="info-label">Ngân hàng</span><span class="info-value">{{ booking.san.maChiNhanh.ten_ngan_hang|default:"Chưa cập nhật" }}</span></div>
+                    <div class="info-row"><span class="info-label">Số tài khoản</span><span class="info-value">{{ booking.san.maChiNhanh.so_tai_khoan|default:"Chưa cập nhật" }}</span></div>
+                    <div class="info-row"><span class="info-label">Chủ tài khoản</span><span class="info-value">{{ booking.san.maChiNhanh.chu_tai_khoan|default:"Chưa cập nhật" }}</span></div>
+                    <div class="info-row"><span class="info-label">Loại đặt sân</span><span class="info-value">{{ booking.get_loaiDatSan_display }}{% if is_group %} · {{ so_buoi }} buổi{% endif %}</span></div>
+                    <div class="info-row"><span class="info-label">Khung giờ</span><span class="info-value">{{ booking.gioBatDau|date:"H:i" }} - {{ booking.gioKetThuc|date:"H:i" }}</span></div>
+                    <div class="transfer-content">
+                        <span class="info-label">Nội dung chuyển khoản</span>
+                        <code>{{ booking.noi_dung_chuyen_khoan }}</code>
+                    </div>
+                    <p class="deposit-note">Vui lòng chuyển đúng số tiền và nội dung để quản lý đối soát nhanh. Sau khi hoàn tất, chọn “Đã chuyển khoản”.</p>
+                </div>
+            </div>
+
+            {% if het_han %}<div class="expired-alert"><i class="fa-solid fa-circle-exclamation me-2"></i>Yêu cầu đặt cọc đã hết hạn. Bạn vẫn có thể hủy đơn hoặc chờ quản lý gửi lại yêu cầu mới.</div>{% endif %}
+
+            <footer class="deposit-actions">
+                <form method="post" action="{% url 'huy_yeu_cau_dat_san' booking.id %}">
+                    {% csrf_token %}
+                    <button class="deposit-btn cancel" type="submit" onclick="return confirm('Bạn có chắc muốn hủy yêu cầu đặt sân này?');"><i class="fa-solid fa-ban"></i> Hủy đặt sân</button>
+                </form>
+                <form method="post" action="{% url 'xac_nhan_da_chuyen_khoan' booking.id %}">
+                    {% csrf_token %}
+                    <button class="deposit-btn confirm" type="submit" {% if not co_the_xac_nhan %}disabled{% endif %} onclick="return confirm('Xác nhận bạn đã chuyển khoản tiền cọc?');"><i class="fa-solid fa-paper-plane"></i> Đã chuyển khoản</button>
+                </form>
+            </footer>
+        </section>
+    </div>
+</main>
+
+<script>
+    const counter = document.querySelector('.payment-countdown');
+    const deadline = new Date(counter.dataset.deadline).getTime();
+    const confirmButton = document.querySelector('.deposit-btn.confirm');
+    let timer = null;
+    function updateCountdown() {
+        const remaining = Math.max(0, deadline - Date.now());
+        const totalSeconds = Math.ceil(remaining / 1000);
+        const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+        const seconds = String(totalSeconds % 60).padStart(2, '0');
+        counter.textContent = remaining > 0 ? minutes + ':' + seconds : 'Đã hết hạn';
+        if (remaining <= 0) {
+            confirmButton.disabled = true;
+            if (timer) clearInterval(timer);
+        }
+    }
+    updateCountdown();
+    if (deadline > Date.now()) timer = setInterval(updateCountdown, 1000);
+</script>
+{% endblock %}

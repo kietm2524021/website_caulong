@@ -1,0 +1,27 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block content %}
+<h2>{{ title }}</h2>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+
+    {{ form.as_p }}
+
+{# Bắt buộc: giữ action name #}
+    <input type="hidden" name="action" value="update_price_by_type">
+
+{# Bắt buộc: giữ danh sách object đã chọn #}
+    {% for obj in items %}
+        <input type="hidden" name="_selected_action" value="{{ obj.pk }}">
+    {% endfor %}
+
+    <input type="hidden" name="apply" value="1">
+
+    <div class="submit-row">
+        <input type="submit" value="Áp dụng" class="default">
+        <a href=".." class="button cancel-link">Hủy</a>
+    </div>
+</form>
+{% endblock %}

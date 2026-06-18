@@ -1,0 +1,385 @@
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Quản trị {{ site_config.ten_website }}{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --admin-bg: #f6f8fb;
+            --admin-surface: #ffffff;
+            --admin-border: #dbe3ee;
+            --admin-text: #172033;
+            --admin-muted: #667085;
+            --admin-primary: #0f766e;
+            --admin-danger: #dc2626;
+            --admin-warning: #b45309;
+            --admin-blue: #2563eb;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Lexend', sans-serif; background: var(--admin-bg); color: var(--admin-text); font-size: 14px; }
+        .admin-shell { min-height: 100vh; display: grid; grid-template-columns: 260px 1fr; }
+        .admin-sidebar { background: #111827; color: #d1d5db; padding: 20px 14px; position: sticky; top: 0; height: 100vh; }
+        .admin-brand { color: white; font-weight: 800; font-size: 1rem; display: flex; gap: 10px; align-items: center; padding: 8px 10px 18px; border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 12px; }
+        .nav-section { color: #9ca3af; font-size: .72rem; text-transform: uppercase; font-weight: 800; padding: 16px 10px 8px; }
+        .side-link { display: flex; align-items: center; gap: 10px; color: #d1d5db; text-decoration: none; padding: 10px 12px; border-radius: 8px; font-weight: 700; margin-bottom: 3px; }
+        .side-link:hover { background: rgba(255,255,255,.08); color: #fff; }
+        .side-link.active { background: var(--admin-primary); color: #fff; }
+        .admin-main { min-width: 0; }
+        .admin-topbar { height: 64px; background: var(--admin-surface); border-bottom: 1px solid var(--admin-border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; position: sticky; top: 0; z-index: 5; }
+        .notification-toggle { position: relative; width: 40px; height: 40px; border: 1px solid var(--admin-border); border-radius: 10px; background: #fff; color: #334155; }
+        .notification-toggle:hover { color: var(--admin-primary); border-color: #99d5cf; background: #f0fdfa; }
+        .notification-count { position: absolute; top: -6px; right: -6px; min-width: 21px; height: 21px; padding: 0 5px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: var(--admin-danger); color: #fff; border: 2px solid #fff; font-size: .65rem; font-weight: 800; }
+        .notification-menu { width: min(390px, calc(100vw - 24px)); padding: 0; border: 1px solid var(--admin-border); border-radius: 14px; overflow: hidden; box-shadow: 0 20px 45px rgba(15, 23, 42, .18); }
+        .notification-head { padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--admin-border); background: #f8fafc; }
+        .notification-list { max-height: 430px; overflow-y: auto; }
+        .notification-item { width: 100%; border: 0; border-bottom: 1px solid #edf1f7; background: #fff; padding: 13px 15px; display: grid; grid-template-columns: 40px 1fr; gap: 11px; text-align: left; color: inherit; }
+        .notification-item:hover { background: #f8fafc; }
+        .notification-item.unread { background: #f0fdfa; }
+        .notification-icon { width: 40px; height: 40px; border-radius: 11px; display: flex; align-items: center; justify-content: center; }
+        .notification-icon.booking { color: #2563eb; background: #dbeafe; }
+        .notification-icon.post { color: #7c3aed; background: #ede9fe; }
+        .notification-icon.support { color: #c2410c; background: #ffedd5; }
+        .notification-icon.payment { color: #15803d; background: #dcfce7; }
+        .notification-icon.system { color: #475569; background: #e2e8f0; }
+        .notification-title { font-size: .8rem; font-weight: 800; color: #1e293b; line-height: 1.35; }
+        .notification-copy { color: #64748b; font-size: .72rem; line-height: 1.4; margin-top: 3px; }
+        .notification-time { color: #94a3b8; font-size: .66rem; margin-top: 5px; }
+        .admin-content { padding: 24px; }
+        .page-title { font-size: 1.35rem; font-weight: 800; margin: 0; }
+        .page-subtitle { color: var(--admin-muted); margin: 4px 0 0; }
+        .panel { background: var(--admin-surface); border: 1px solid var(--admin-border); border-radius: 8px; }
+        .panel-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--admin-border); }
+        .panel-title { margin: 0; font-size: .95rem; font-weight: 800; }
+        .panel-body { padding: 16px; }
+        .stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+        .stat-box { background: var(--admin-surface); border: 1px solid var(--admin-border); border-radius: 8px; padding: 14px; }
+        .stat-label { color: var(--admin-muted); font-size: .76rem; font-weight: 800; text-transform: uppercase; }
+        .stat-value { font-size: 1.45rem; font-weight: 800; margin-top: 6px; }
+        .table-admin { width: 100%; margin: 0; }
+        .table-admin th { color: #475467; font-size: .74rem; text-transform: uppercase; letter-spacing: 0; white-space: nowrap; }
+        .table-admin td { vertical-align: middle; color: #1f2937; }
+        .table-admin th, .table-admin td { padding: 11px 12px; border-bottom: 1px solid #edf1f7; }
+        .status-pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 4px 8px; font-size: .72rem; font-weight: 800; white-space: nowrap; }
+        .st-pending { color: var(--admin-warning); background: #fff7ed; }
+        .st-confirmed { color: #15803d; background: #ecfdf3; }
+        .st-cancelled { color: var(--admin-danger); background: #fef2f2; }
+        .st-completed { color: var(--admin-blue); background: #eff6ff; }
+        .tool-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+        .tool-row .form-control, .tool-row .form-select { min-width: 150px; }
+        .btn-admin { border-radius: 7px; font-weight: 800; font-size: .78rem; padding: 7px 10px; }
+        .btn-icon { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border-radius: 7px; }
+        .muted { color: var(--admin-muted); }
+        .empty-state { padding: 34px 12px; text-align: center; color: var(--admin-muted); }
+        .pagination { margin: 16px 0 0; }
+        .admin-support-fab { position: fixed; left: 22px; bottom: 22px; z-index: 1080; width: 58px; height: 58px; border-radius: 50%; border: none; background: var(--admin-primary); color: white; box-shadow: 0 12px 30px rgba(15, 118, 110, .35); display: flex; align-items: center; justify-content: center; font-size: 1.25rem; }
+        .admin-support-badge { position: absolute; top: -4px; right: -4px; min-width: 22px; height: 22px; border-radius: 999px; background: var(--admin-danger); color: white; border: 2px solid white; font-size: .72rem; display: none; align-items: center; justify-content: center; font-weight: 800; }
+        .admin-support-panel { position: fixed; left: 22px; bottom: 92px; z-index: 1081; width: min(760px, calc(100vw - 28px)); height: 560px; max-height: calc(100vh - 120px); background: white; border: 1px solid var(--admin-border); border-radius: 10px; box-shadow: 0 24px 60px rgba(15, 23, 42, .2); display: none; overflow: hidden; }
+        .admin-support-panel.open { display: grid; grid-template-columns: 280px 1fr; }
+        .admin-support-list { border-right: 1px solid var(--admin-border); overflow-y: auto; background: #f8fafc; }
+        .admin-support-thread { display: block; width: 100%; border: 0; border-bottom: 1px solid #edf1f7; background: transparent; text-align: left; padding: 12px; }
+        .admin-support-thread.active, .admin-support-thread:hover { background: #ecfdf3; }
+        .admin-support-chat { display: flex; flex-direction: column; min-width: 0; }
+        .admin-support-head { padding: 13px 15px; background: #0f172a; color: white; display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+        .admin-support-actions { display: flex; gap: 8px; }
+        .admin-support-messages { flex: 1; padding: 14px; overflow-y: auto; background: #f8fafc; }
+        .admin-chat-row { display: flex; margin-bottom: 10px; }
+        .admin-chat-row.user { justify-content: flex-start; }
+        .admin-chat-row.admin { justify-content: flex-end; }
+        .admin-chat-bubble { max-width: 82%; border: 1px solid #dbe3ee; border-radius: 9px; padding: 9px 11px; background: white; line-height: 1.45; }
+        .admin-chat-row.admin .admin-chat-bubble { background: var(--admin-primary); border-color: var(--admin-primary); color: white; }
+        .admin-support-form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--admin-border); }
+        .admin-support-form input { flex: 1; min-width: 0; border: 1px solid var(--admin-border); border-radius: 999px; padding: 10px 12px; }
+        .admin-support-form button, .admin-support-close, .admin-support-action { border: none; border-radius: 999px; background: var(--admin-primary); color: white; font-weight: 800; padding: 9px 13px; }
+        .admin-support-action.danger { background: var(--admin-danger); }
+        .admin-support-action.warn { background: var(--admin-warning); }
+        .admin-support-close { background: transparent; padding: 4px; }
+        @media (max-width: 1100px) {
+            .admin-shell { grid-template-columns: 1fr; }
+            .admin-sidebar { position: static; height: auto; }
+            .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        @media (max-width: 720px) {
+            .admin-topbar { height: auto; padding: 14px; align-items: flex-start; gap: 12px; flex-direction: column; }
+            .admin-content { padding: 14px; }
+            .stat-grid { grid-template-columns: 1fr; }
+            .table-responsive { border: 1px solid var(--admin-border); border-radius: 8px; }
+            .admin-support-panel.open { grid-template-columns: 1fr; }
+            .admin-support-list { max-height: 180px; border-right: 0; border-bottom: 1px solid var(--admin-border); }
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="admin-shell">
+        <aside class="admin-sidebar">
+            <div class="admin-brand"><i class="fa-solid fa-gauge-high"></i> {{ site_config.ten_website }}</div>
+            <div class="nav-section">Vận hành</div>
+            <a class="side-link {% if active_nav == 'dashboard' %}active{% endif %}" href="{% url 'admin_dashboard' %}"><i class="fa-solid fa-chart-line"></i> Tổng quan</a>
+            <a class="side-link {% if active_nav == 'bookings' %}active{% endif %}" href="{% url 'admin_bookings' %}"><i class="fa-solid fa-calendar-check"></i> Đơn đặt sân</a>
+            <a class="side-link {% if active_nav == 'courts' %}active{% endif %}" href="{% url 'admin_courts' %}"><i class="fa-solid fa-table-tennis-paddle-ball"></i> Sân và chi nhánh</a>
+            <div class="nav-section">Khách hàng</div>
+            <a class="side-link {% if active_nav == 'users' %}active{% endif %}" href="{% url 'admin_users' %}"><i class="fa-solid fa-users-gear"></i> Người dùng</a>
+            {% if request.user.is_superuser or request.user.is_staff and not request.user.chi_nhanh_quan_ly %}
+            <a class="side-link {% if active_nav == 'posts' %}active{% endif %}" href="{% url 'admin_posts' %}"><i class="fa-solid fa-newspaper"></i> Bài viết</a>
+            {% endif %}
+            <div class="nav-section">Liên kết</div>
+            <a class="side-link" href="{% url 'home' %}"><i class="fa-solid fa-house"></i> Về website</a>
+            {% if request.user.is_staff or request.user.is_superuser %}
+            <a class="side-link" href="/admin/"><i class="fa-solid fa-screwdriver-wrench"></i> Quản trị hệ thống</a>
+            {% endif %}
+        </aside>
+
+        <main class="admin-main">
+            <header class="admin-topbar">
+                <div>
+                    <h1 class="page-title">{% block page_title %}Quản trị{% endblock %}</h1>
+                    <p class="page-subtitle">{% block page_subtitle %}Bảng điều khiển vận hành hệ thống{% endblock %}</p>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <div class="dropdown">
+                        <button class="notification-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="Mở thông báo quản trị">
+                            <i class="fa-regular fa-bell"></i>
+                            {% if admin_unread_notifications %}<span class="notification-count">{{ admin_unread_notifications }}</span>{% endif %}
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end notification-menu">
+                            <div class="notification-head">
+                                <div>
+                                    <div class="fw-bold">Thông báo</div>
+                                    <div class="muted small">{{ admin_unread_notifications|default:0 }} thông báo chưa đọc</div>
+                                </div>
+                                {% if admin_unread_notifications %}
+                                    <form method="post" action="{% url 'admin_notifications_read_all' %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button class="btn btn-link btn-sm text-decoration-none fw-bold" type="submit">Đọc tất cả</button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                            <div class="notification-list">
+                                {% for notification in admin_notifications %}
+                                    <form method="post" action="{% url 'admin_notification_open' notification.id %}">
+                                        {% csrf_token %}
+                                        <button class="notification-item {% if not notification.is_read %}unread{% endif %}" type="submit">
+                                            <span class="notification-icon {{ notification.loai }}">
+                                                {% if notification.loai == 'booking' %}<i class="fa-solid fa-calendar-plus"></i>
+                                                {% elif notification.loai == 'post' %}<i class="fa-solid fa-pen-to-square"></i>
+                                                {% elif notification.loai == 'support' %}<i class="fa-solid fa-comments"></i>
+                                                {% elif notification.loai == 'payment' %}<i class="fa-solid fa-money-check-dollar"></i>
+                                                {% else %}<i class="fa-solid fa-bell"></i>{% endif %}
+                                            </span>
+                                            <span>
+                                                <span class="notification-title d-block">{{ notification.tieu_de }}</span>
+                                                <span class="notification-copy d-block">{{ notification.noi_dung }}</span>
+                                                <span class="notification-time d-block">{{ notification.created_at|naturaltime }}</span>
+                                            </span>
+                                        </button>
+                                    </form>
+                                {% empty %}
+                                    <div class="empty-state"><i class="fa-regular fa-bell-slash fs-4 d-block mb-2"></i>Chưa có thông báo mới.</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    <span class="muted small">{{ request.user.ten|default:request.user.username }}</span>
+                    <a class="btn btn-outline-secondary btn-admin" href="{% url 'logout' %}"><i class="fa-solid fa-right-from-bracket me-1"></i> Đăng xuất</a>
+                </div>
+            </header>
+
+            <div class="admin-content">
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }} py-2">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+    <button class="admin-support-fab" id="adminSupportFab" type="button" aria-label="Mở tin nhắn hỗ trợ chi nhánh">
+        <i class="fa-solid fa-comment-dots"></i>
+        <span class="admin-support-badge" id="adminSupportBadge">0</span>
+    </button>
+    <section class="admin-support-panel" id="adminSupportPanel" aria-label="Yêu cầu hỗ trợ admin">
+        <div class="admin-support-list" id="adminSupportList">
+            <div class="empty-state">Đang tải yêu cầu...</div>
+        </div>
+        <div class="admin-support-chat">
+            <div class="admin-support-head">
+                <div>
+                    <div class="fw-bold" id="adminSupportTitle">Hỗ trợ chi nhánh</div>
+                    <small class="opacity-75" id="adminSupportSubtitle">Chọn một yêu cầu để trả lời</small>
+                </div>
+                <div class="admin-support-actions">
+                    <button class="admin-support-action warn" id="adminSupportLeave" type="button">Rời chat</button>
+                    <button class="admin-support-action danger" id="adminSupportDelete" type="button">Xóa lịch sử</button>
+                    <button class="admin-support-close" id="adminSupportClose" type="button" aria-label="Đóng"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+            <div class="admin-support-messages" id="adminSupportMessages">
+                <div class="empty-state">Chưa chọn hội thoại.</div>
+            </div>
+            <form class="admin-support-form" id="adminSupportForm">
+                <input id="adminSupportInput" type="text" autocomplete="off" placeholder="Nhập phản hồi cho khách...">
+                <button type="submit"><i class="fa-solid fa-paper-plane"></i></button>
+            </form>
+        </div>
+    </section>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const fab = document.getElementById("adminSupportFab");
+            const panel = document.getElementById("adminSupportPanel");
+            const badge = document.getElementById("adminSupportBadge");
+            const closeBtn = document.getElementById("adminSupportClose");
+            const leaveBtn = document.getElementById("adminSupportLeave");
+            const deleteBtn = document.getElementById("adminSupportDelete");
+            const listBox = document.getElementById("adminSupportList");
+            const messagesBox = document.getElementById("adminSupportMessages");
+            const title = document.getElementById("adminSupportTitle");
+            const subtitle = document.getElementById("adminSupportSubtitle");
+            const form = document.getElementById("adminSupportForm");
+            const input = document.getElementById("adminSupportInput");
+            let activeConversationId = null;
+
+            function csrfToken() {
+                const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+                return match ? decodeURIComponent(match[1]) : "";
+            }
+
+            function setBadge(count) {
+                badge.textContent = count;
+                badge.style.display = count > 0 ? "flex" : "none";
+            }
+
+            function addMessage(rowType, text, meta) {
+                const row = document.createElement("div");
+                row.className = "admin-chat-row " + rowType;
+                const bubble = document.createElement("div");
+                bubble.className = "admin-chat-bubble";
+                bubble.textContent = text;
+                if (meta) {
+                    const small = document.createElement("div");
+                    small.className = "small mt-1";
+                    small.style.opacity = ".72";
+                    small.textContent = meta;
+                    bubble.appendChild(small);
+                }
+                row.appendChild(bubble);
+                messagesBox.appendChild(row);
+            }
+
+            function renderWidget(data) {
+                setBadge(data.unread_count || 0);
+                listBox.innerHTML = "";
+                if (!data.conversations.length) {
+                    listBox.innerHTML = '<div class="empty-state">Chưa có yêu cầu gặp quản lý chi nhánh.</div>';
+                }
+                data.conversations.forEach(function(item) {
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.className = "admin-support-thread" + (item.id === activeConversationId ? " active" : "");
+                    button.innerHTML = '<strong></strong><div class="muted small"></div><div class="muted small mt-1"></div>';
+                    button.querySelector("strong").textContent = item.customer_name + (item.unread_count ? " (" + item.unread_count + ")" : "");
+                    button.querySelectorAll("div")[0].textContent = item.branch_name + " · " + item.manager_name;
+                    button.querySelectorAll("div")[1].textContent = item.last_message || "Yêu cầu gặp quản lý";
+                    button.addEventListener("click", function() {
+                        activeConversationId = item.id;
+                        loadWidget(item.id);
+                    });
+                    listBox.appendChild(button);
+                });
+
+                messagesBox.innerHTML = "";
+                if (data.active_conversation) {
+                    activeConversationId = data.active_conversation.id;
+                    title.textContent = data.active_conversation.customer_name;
+                    subtitle.textContent = data.active_conversation.branch_name + " · Quản lý: " + data.active_conversation.manager_name;
+                    data.messages.forEach(function(item) {
+                        if (item.sender === "admin") {
+                            addMessage("admin", item.question, (item.admin_name || "Admin") + " · " + item.sent_at);
+                            return;
+                        }
+                        addMessage("user", item.question, data.active_conversation.customer_name + " · " + item.sent_at);
+                        if (item.reply) {
+                            addMessage("admin", item.reply, (item.admin_name || "Admin") + " · " + item.replied_at);
+                        }
+                    });
+                } else {
+                    activeConversationId = null;
+                    title.textContent = "Hỗ trợ chi nhánh";
+                    subtitle.textContent = "Chọn một yêu cầu để trả lời";
+                    messagesBox.innerHTML = '<div class="empty-state">Chưa chọn hội thoại.</div>';
+                }
+                messagesBox.scrollTop = messagesBox.scrollHeight;
+            }
+
+            async function loadWidget(conversationId) {
+                const url = conversationId ? "{% url 'admin_support_widget_state' %}?conversation_id=" + conversationId : "{% url 'admin_support_widget_state' %}";
+                const response = await fetch(url);
+                if (response.ok) renderWidget(await response.json());
+            }
+
+            async function replyActive(message) {
+                if (!activeConversationId || !message) return;
+                const response = await fetch("{% url 'admin_support_widget_reply' %}", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken()},
+                    body: JSON.stringify({conversation_id: activeConversationId, reply: message})
+                });
+                if (response.ok) {
+                    input.value = "";
+                    await loadWidget(activeConversationId);
+                }
+            }
+
+            async function leaveConversation() {
+                if (!activeConversationId) return;
+                const response = await fetch("{% url 'admin_support_widget_leave' %}", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken()},
+                    body: JSON.stringify({conversation_id: activeConversationId})
+                });
+                if (response.ok) {
+                    activeConversationId = null;
+                    await loadWidget();
+                }
+            }
+
+            async function deleteConversation() {
+                if (!activeConversationId) return;
+                const response = await fetch("{% url 'admin_support_widget_delete' %}", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken()},
+                    body: JSON.stringify({conversation_id: activeConversationId})
+                });
+                if (response.ok) {
+                    activeConversationId = null;
+                    await loadWidget();
+                }
+            }
+
+            fab.addEventListener("click", function() {
+                panel.classList.toggle("open");
+                loadWidget(activeConversationId);
+            });
+            closeBtn.addEventListener("click", function() { panel.classList.remove("open"); });
+            form.addEventListener("submit", function(event) {
+                event.preventDefault();
+                replyActive(input.value.trim());
+            });
+            leaveBtn.addEventListener("click", function() { leaveConversation(); });
+            deleteBtn.addEventListener("click", function() { deleteConversation(); });
+            loadWidget();
+            setInterval(function() {
+                if (panel.classList.contains("open")) loadWidget(activeConversationId);
+            }, 15000);
+        });
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,205 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}Diễn Đàn - Cộng Đồng Cầu Lông{% endblock %}
+
+{% block content %}
+<style>
+    /* Header Banner */
+    .forum-header {
+        background: linear-gradient(135deg, #2c3e50, #4ca1af);
+        padding: 60px 0;
+        color: white;
+        text-align: center;
+        margin-bottom: 40px;
+        border-radius: 0 0 30px 30px;
+    }
+    
+    /* Search Bar */
+    .search-box {
+        max-width: 600px;
+        margin: -30px auto 40px;
+        background: white;
+        padding: 10px;
+        border-radius: 50px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        display: flex;
+        position: relative;
+        z-index: 10;
+    }
+    .search-input {
+        border: none;
+        flex: 1;
+        padding: 10px 20px;
+        outline: none;
+        font-size: 1rem;
+    }
+    .btn-search {
+        background: #38ef7d;
+        color: white;
+        border: none;
+        width: 50px; height: 50px;
+        border-radius: 50%;
+        transition: 0.3s;
+    }
+    .btn-search:hover { background: #11998e; transform: rotate(90deg); }
+
+    /* Post Card */
+    .post-card {
+        background: white;
+        border-radius: 15px;
+        overflow: hidden;
+        transition: 0.3s;
+        border: 1px solid #f1f3f5;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+    .post-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 30px rgba(0,0,0,0.08);
+        border-color: #38ef7d;
+    }
+    .post-img-wrap {
+        height: 200px;
+        overflow: hidden;
+        position: relative;
+    }
+    .post-img {
+        width: 100%; height: 100%;
+        object-fit: cover;
+        transition: 0.5s;
+    }
+    .post-card:hover .post-img { transform: scale(1.1); }
+    
+    .post-body { padding: 20px; flex: 1; display: flex; flex-direction: column; }
+    .post-meta { font-size: 0.8rem; color: #adb5bd; margin-bottom: 10px; }
+    .post-title { font-weight: 700; font-size: 1.1rem; margin-bottom: 10px; line-height: 1.4; }
+    .post-desc { font-size: 0.9rem; color: #6c757d; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    
+    .post-footer {
+        margin-top: auto;
+        padding-top: 15px;
+        border-top: 1px dashed #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.85rem;
+    }
+    .author-avatar {
+        width: 30px; height: 30px;
+        border-radius: 50%;
+        object-fit: cover;
+        margin-right: 8px;
+    }
+    
+    /* Link bao quanh thẻ card */
+    .card-link {
+        text-decoration: none;
+        color: inherit;
+        display: block;
+        height: 100%;
+    }
+    
+    /* Create Button Floating */
+    .btn-create-float {
+        position: fixed;
+        bottom: 30px; right: 30px;
+        width: 60px; height: 60px;
+        background: #11998e;
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center; justify-content: center;
+        font-size: 1.5rem;
+        box-shadow: 0 5px 20px rgba(17, 153, 142, 0.4);
+        transition: 0.3s;
+        z-index: 100;
+        text-decoration: none;
+    }
+    .btn-create-float:hover { transform: scale(1.1) rotate(90deg); color: white; }
+</style>
+
+<div class="forum-header">
+    <div class="container animate__animated animate__fadeInDown">
+        <h1 class="fw-bold">DIỄN ĐÀN CỘNG ĐỒNG</h1>
+        <p class="opacity-75">Nơi chia sẻ kinh nghiệm, tìm đối thủ và giao lưu cầu lông</p>
+    </div>
+</div>
+
+<div class="container">
+    <form action="{% url 'dien_dan' %}" method="get">
+        <div class="search-box animate__animated animate__fadeInUp">
+            <input type="text" name="q" class="search-input" placeholder="Tìm kiếm bài viết, kinh nghiệm..." value="{{ query|default:'' }}">
+            <button type="submit" class="btn-search"><i class="fa-solid fa-magnifying-glass"></i></button>
+        </div>
+    </form>
+</div>
+
+<div class="container pb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="fw-bold border-start border-4 border-success ps-3">Bài Viết Mới Nhất</h4>
+        <a href="{% url 'tao_bai_viet' %}" class="btn btn-success rounded-pill px-4 fw-bold">
+            <i class="fa-solid fa-pen-nib me-2"></i>Viết bài mới
+        </a>
+    </div>
+
+    <div class="row g-4">
+        {% for bai in ds_bai %}
+        <div class="col-lg-4 col-md-6">
+            <a href="{% url 'chi_tiet_bai_viet' bai.id %}" class="card-link">
+                <div class="post-card animate__animated animate__fadeInUp">
+                    <div class="post-img-wrap">
+                        {% if bai.hinh_anh %}
+                            <img src="{{ bai.hinh_anh.url }}" class="post-img" alt="Post Image" onerror="this.onerror=null;this.src='https://images.unsplash.com/photo-1626224583764-847649623dbb?q=80&w=600&auto=format&fit=crop';">
+                        {% else %}
+                            <img src="https://images.unsplash.com/photo-1626224583764-847649623dbb?q=80&w=600&auto=format&fit=crop" class="post-img">
+                        {% endif %}
+                    </div>
+                    
+                    <div class="post-body">
+                        <div class="post-meta">
+                            <i class="fa-regular fa-calendar me-1"></i> {{ bai.ngay_dang|date:"d/m/Y" }}
+                            <span class="mx-2">•</span>
+                            <i class="fa-regular fa-eye me-1"></i> {{ bai.luot_xem }}
+                        </div>
+                        
+                        <h5 class="post-title text-dark">{{ bai.tieu_de|truncatechars:60 }}</h5>
+                        <p class="post-desc">{{ bai.noi_dung|striptags|truncatechars:100 }}</p>
+                        
+                        <div class="post-footer">
+                            <div class="d-flex align-items-center text-secondary">
+                                {% if bai.nguoi_dang.avatar %}
+                                    <img src="{{ bai.nguoi_dang.avatar.url }}" class="author-avatar">
+                                {% else %}
+                                    <div class="author-avatar bg-light d-flex align-items-center justify-content-center fw-bold text-success border">
+                                        {{ bai.nguoi_dang.ten|slice:":1" }}
+                                    </div>
+                                {% endif %}
+                                <span>{{ bai.nguoi_dang.ten }}</span>
+                            </div>
+                            
+                            <span class="text-success fw-bold text-decoration-none">
+                                Xem <i class="fa-solid fa-arrow-right"></i>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% empty %}
+        <div class="col-12 text-center py-5">
+            <img src="https://cdn-icons-png.flaticon.com/512/7486/7486747.png" width="80" class="mb-3 opacity-50">
+            <h5 class="text-muted fw-bold">Chưa có bài viết nào!</h5>
+            <p class="text-secondary">Hãy là người đầu tiên chia sẻ bài viết.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<a href="{% url 'tao_bai_viet' %}" class="btn-create-float d-md-none">
+    <i class="fa-solid fa-plus"></i>
+</a>
+
+{% endblock %}

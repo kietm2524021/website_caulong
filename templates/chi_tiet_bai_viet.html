@@ -1,0 +1,279 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}{{ bai.tieu_de }}{% endblock %}
+
+{% block content %}
+<style>
+    /* CSS CHO BÀI VIẾT */
+    .article-header {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        padding: 60px 0 40px;
+        border-bottom: 1px solid #dee2e6;
+    }
+    .author-badge { display: flex; align-items: center; gap: 12px; margin-top: 20px; }
+    .author-img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    .article-content { font-size: 1.1rem; line-height: 1.8; color: #2d3436; margin-bottom: 40px; }
+    .article-img { width: 100%; border-radius: 20px; margin-bottom: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
+    .contact-box { background: #f0fff4; border: 1px solid #38ef7d; border-radius: 15px; padding: 20px; margin-top: 40px; display: flex; align-items: center; justify-content: space-between; }
+
+    /* CSS CHO BÌNH LUẬN (Facebook Style) */
+    .comment-section { background: #fff; border-top: 1px solid #eee; padding-top: 40px; margin-top: 60px; }
+    .comment-item { margin-bottom: 20px; }
+    
+    .comment-avatar { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; margin-right: 12px; }
+    .comment-avatar-small { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; margin-right: 10px; }
+    
+    .comment-box { background: #f0f2f5; padding: 10px 15px; border-radius: 18px; display: inline-block; max-width: 90%; position: relative; }
+    .comment-author { font-weight: 700; color: #050505; font-size: 0.85rem; text-decoration: none; display: block; }
+    .comment-text { margin: 2px 0 0; font-size: 0.95rem; color: #050505; line-height: 1.4; }
+    
+    /* Actions Row */
+    .comment-actions { margin-left: 50px; font-size: 0.75rem; margin-top: 3px; color: #65676b; display: flex; gap: 15px; align-items: center; }
+    .btn-action { font-weight: 700; cursor: pointer; text-decoration: none; color: #65676b; transition: 0.2s; }
+    .btn-action:hover { text-decoration: underline; color: #2c3e50; }
+    .btn-delete { color: #e74c3c; font-weight: normal; }
+    .btn-delete:hover { text-decoration: underline; color: #c0392b; }
+
+    .reply-list { margin-left: 50px; margin-top: 10px; padding-left: 10px; border-left: 2px solid #f0f2f5; }
+    .reply-form-container { margin-left: 50px; margin-top: 10px; display: none; }
+    .reply-input { border-radius: 20px; background: #f0f2f5; border: none; font-size: 0.9rem; padding: 8px 15px; }
+    .reply-input:focus { background: #e4e6eb; box-shadow: none; }
+</style>
+
+<div class="article-header">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-3">
+                        <li class="breadcrumb-item"><a href="{% url 'dien_dan' %}" class="text-decoration-none">Diễn đàn</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Chi tiết</li>
+                    </ol>
+                </nav>
+                <h1 class="fw-bold mb-3 display-6">{{ bai.tieu_de }}</h1>
+                <div class="d-flex justify-content-between align-items-end">
+                    <div class="author-badge">
+                        {% if bai.nguoi_dang.avatar %}
+                            <img src="{{ bai.nguoi_dang.avatar.url }}" class="author-img">
+                        {% else %}
+                            <div class="author-img bg-secondary d-flex align-items-center justify-content-center text-white fw-bold">{{ bai.nguoi_dang.ten|slice:":1" }}</div>
+                        {% endif %}
+                        <div>
+                            <div class="fw-bold text-dark">{{ bai.nguoi_dang.ten }}</div>
+                            <small class="text-muted">{{ bai.ngay_dang|date:"d/m/Y H:i" }} • <i class="fa-regular fa-eye me-1"></i>{{ bai.luot_xem }}</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="article-content">
+                {% if bai.hinh_anh %}
+                    <img src="{{ bai.hinh_anh.url }}" class="article-img" onerror="this.onerror=null;this.style.display='none';">
+                {% endif %}
+                {{ bai.noi_dung|linebreaks }}
+            </div>
+
+            <div class="contact-box animate__animated animate__fadeInUp">
+                <div>
+                    <h5 class="fw-bold text-success mb-1">Liên hệ tác giả?</h5>
+                    <p class="mb-0 text-muted small">Trao đổi thêm về nội dung này.</p>
+                </div>
+                <a href="tel:{{ bai.nguoi_dang.sodienthoai }}" class="btn btn-success rounded-pill fw-bold px-4">
+                    <i class="fa-solid fa-phone me-2"></i>{{ bai.nguoi_dang.sodienthoai }}
+                </a>
+            </div>
+            {% if bai.file_dinh_kem %}
+            <div class="mt-4 p-3 bg-light rounded-3 border">
+                <i class="fa-solid fa-paperclip me-2 text-secondary"></i>
+                <a href="{{ bai.file_dinh_kem.url }}" target="_blank" class="text-decoration-none fw-bold text-dark">Tải file đính kèm</a>
+            </div>
+            {% endif %}
+
+            <hr class="my-5">
+
+            <div class="comment-section">
+                <h5 class="fw-bold mb-4">Bình luận ({{ ds_binh_luan.count }})</h5>
+
+                {% if user.is_authenticated %}
+                <div class="d-flex mb-5">
+                    {% if user.avatar %}
+                        <img src="{{ user.avatar.url }}" class="comment-avatar">
+                    {% else %}
+                        <div class="comment-avatar bg-secondary d-flex align-items-center justify-content-center text-white fw-bold">{{ user.ten|slice:":1" }}</div>
+                    {% endif %}
+                    <form method="post" class="flex-grow-1">
+                        {% csrf_token %}
+                        {{ form.noi_dung }}
+                        <div class="text-end mt-2">
+                            <button type="submit" class="btn btn-primary btn-sm rounded-pill px-4 fw-bold">Gửi</button>
+                        </div>
+                    </form>
+                </div>
+                {% else %}
+                    <div class="alert alert-light border text-center mb-5">
+                        Vui lòng <a href="{% url 'login' %}?next={{ request.path }}" class="fw-bold">đăng nhập</a> để tham gia bình luận.
+                    </div>
+                {% endif %}
+
+                {% for bl in ds_binh_luan %}
+                <div class="comment-item animate__animated animate__fadeIn">
+                    
+                    <div class="d-flex">
+                        {% if bl.nguoi_binh_luan.avatar %}
+                            <img src="{{ bl.nguoi_binh_luan.avatar.url }}" class="comment-avatar">
+                        {% else %}
+                            <div class="comment-avatar bg-light border d-flex align-items-center justify-content-center fw-bold text-success">{{ bl.nguoi_binh_luan.ten|slice:":1" }}</div>
+                        {% endif %}
+                        
+                        <div>
+                            <div class="comment-box">
+                                <span class="comment-author">
+                                    {{ bl.nguoi_binh_luan.ten }}
+                                    {% if bl.nguoi_binh_luan.is_staff %}
+                                        <span class="badge bg-danger rounded-pill ms-1" style="font-size: 0.6rem;">Admin</span>
+                                    {% endif %}
+                                </span>
+                                <p class="comment-text">{{ bl.noi_dung|linebreaksbr }}</p>
+                            </div>
+                            
+                            <div class="comment-actions">
+                                <span>{{ bl.ngay_tao|timesince }} trước</span>
+                                {% if user.is_authenticated %}
+                                    <span class="btn-action" onclick="toggleReply('reply-box-{{ bl.id }}')">Trả lời</span>
+                                {% endif %}
+                                
+                                {% if user == bl.nguoi_binh_luan or user.is_staff %}
+                                    <form method="post" action="{% url 'xoa_binh_luan' bl.id %}" id="delete-comment-{{ bl.id }}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="button" onclick="confirmDelete('delete-comment-{{ bl.id }}')" class="btn-action btn-delete border-0 bg-transparent p-0">Xóa</button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if bl.replies.all %}
+                    <div class="reply-list">
+                        {% for rep in bl.replies.all %}
+                        <div class="d-flex mb-2 pt-2">
+                            {% if rep.nguoi_binh_luan.avatar %}
+                                <img src="{{ rep.nguoi_binh_luan.avatar.url }}" class="comment-avatar-small">
+                            {% else %}
+                                <div class="comment-avatar-small bg-light border d-flex align-items-center justify-content-center fw-bold text-success" style="font-size: 0.7rem;">{{ rep.nguoi_binh_luan.ten|slice:":1" }}</div>
+                            {% endif %}
+                            
+                            <div>
+                                <div class="comment-box">
+                                    <span class="comment-author">
+                                        {{ rep.nguoi_binh_luan.ten }}
+                                        {% if rep.nguoi_binh_luan.is_staff %}
+                                            <span class="badge bg-danger rounded-pill ms-1" style="font-size: 0.6rem;">Admin</span>
+                                        {% endif %}
+                                    </span>
+                                    <p class="comment-text">{{ rep.noi_dung|linebreaksbr }}</p>
+                                </div>
+                                <div class="comment-actions ms-2">
+                                    <span>{{ rep.ngay_tao|timesince }} trước</span>
+                                    
+                                    {% if user.is_authenticated %}
+                                        <span class="btn-action" onclick="toggleReply('reply-box-{{ bl.id }}', '{{ rep.nguoi_binh_luan.ten }}')">Trả lời</span>
+                                    {% endif %}
+
+                                    {% if user == rep.nguoi_binh_luan or user.is_staff %}
+                                        <form method="post" action="{% url 'xoa_binh_luan' rep.id %}" id="delete-comment-{{ rep.id }}" class="d-inline">
+                                            {% csrf_token %}
+                                            <button type="button" onclick="confirmDelete('delete-comment-{{ rep.id }}')" class="btn-action btn-delete border-0 bg-transparent p-0">Xóa</button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <div id="reply-box-{{ bl.id }}" class="reply-form-container">
+                        <form method="post" class="d-flex align-items-start">
+                            {% csrf_token %}
+                            <input type="hidden" name="parent_id" value="{{ bl.id }}">
+                            
+                            {% if user.avatar %}
+                                <img src="{{ user.avatar.url }}" class="comment-avatar-small mt-1">
+                            {% else %}
+                                <div class="comment-avatar-small bg-secondary d-flex align-items-center justify-content-center text-white fw-bold mt-1">{{ user.ten|slice:":1" }}</div>
+                            {% endif %}
+
+                            <div class="flex-grow-1">
+                                <textarea name="noi_dung" class="form-control reply-input" rows="1" placeholder="Viết phản hồi..."></textarea>
+                                <div class="text-end mt-1">
+                                    <button type="submit" class="btn btn-primary btn-sm rounded-pill" style="font-size: 0.75rem;">Gửi trả lời</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                </div>
+                {% empty %}
+                    <p class="text-muted text-center fst-italic py-3">Chưa có bình luận nào. Hãy là người đầu tiên!</p>
+                {% endfor %}
+
+            </div>
+
+            <div class="text-center mt-5">
+                <a href="{% url 'dien_dan' %}" class="btn btn-outline-secondary rounded-pill px-4">
+                    <i class="fa-solid fa-arrow-left me-2"></i>Quay lại diễn đàn
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+    // Hàm bật tắt form trả lời
+    function toggleReply(id, tagName = null) {
+        var box = document.getElementById(id);
+        var textarea = box.querySelector('textarea');
+        
+        // Ẩn các box khác
+        document.querySelectorAll('.reply-form-container').forEach(e => {
+            if(e.id !== id) e.style.display = 'none';
+        });
+
+        // Hiện box này
+        box.style.display = "block";
+        textarea.focus();
+        
+        // Nếu bấm trả lời ở comment con, tự động tag tên (Optional UI enhancement)
+        if (tagName) {
+            textarea.placeholder = `Trả lời ${tagName}...`;
+        }
+    }
+
+    // Hàm xác nhận xóa
+    function confirmDelete(formId) {
+        Swal.fire({
+            title: 'Bạn chắc chắn chứ?',
+            text: "Bình luận này sẽ bị xóa vĩnh viễn!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Vâng, xóa nó!',
+            cancelButtonText: 'Hủy'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                document.getElementById(formId).submit();
+            }
+        })
+    }
+</script>
+{% endblock %}

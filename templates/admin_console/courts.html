@@ -1,0 +1,98 @@
+{% extends 'admin_console/base.html' %}
+{% load humanize %}
+
+{% block title %}Sân Và Chi Nhánh{% endblock %}
+{% block page_title %}Sân & chi nhánh{% endblock %}
+{% block page_subtitle %}Cập nhật giá, trạng thái sân và thông tin QR/chuyển khoản theo chi nhánh{% endblock %}
+
+{% block content %}
+{% for branch in branches %}
+<section class="panel mb-3">
+    <div class="panel-header">
+        <div>
+            <h2 class="panel-title">{{ branch.tenChiNhanh }}</h2>
+            <div class="muted small">{{ branch.diaChi }} · Hotline {{ branch.sdt }}</div>
+        </div>
+        <span class="status-pill st-confirmed">{{ branch.ds_san.all|length }} sân</span>
+    </div>
+    <div class="panel-body border-bottom">
+        <form method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="update_branch">
+            <input type="hidden" name="branch_id" value="{{ branch.id }}">
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">Ngân hàng</label>
+                <input class="form-control" name="ten_ngan_hang" value="{{ branch.ten_ngan_hang }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">Số tài khoản</label>
+                <input class="form-control" name="so_tai_khoan" value="{{ branch.so_tai_khoan }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">Chủ tài khoản</label>
+                <input class="form-control" name="chu_tai_khoan" value="{{ branch.chu_tai_khoan }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">QR thanh toán</label>
+                <input class="form-control" type="file" name="qr_thanh_toan" accept="image/*">
+            </div>
+            <div class="col-md-1">
+                <button class="btn btn-primary btn-admin w-100" type="submit">Lưu</button>
+            </div>
+            {% if branch.qr_thanh_toan %}
+            <div class="col-12">
+                <span class="muted small">QR hiện tại:</span>
+                <a href="{{ branch.qr_thanh_toan.url }}" target="_blank">{{ branch.qr_thanh_toan.name }}</a>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table-admin">
+            <thead>
+                <tr>
+                    <th>Sân</th>
+                    <th>Giờ vàng</th>
+                    <th>Giờ thường</th>
+                    <th>Cố định</th>
+                    <th>Mô tả</th>
+                    <th>Hoạt động</th>
+                    <th class="text-end">Lưu</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for court in branch.ds_san.all %}
+                <tr>
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="update_court">
+                        <input type="hidden" name="court_id" value="{{ court.id }}">
+                        <td><strong>{{ court.tenSan }}</strong></td>
+                        <td><input class="form-control form-control-sm" name="gia_vang" value="{{ court.gia_vang|floatformat:0 }}"></td>
+                        <td><input class="form-control form-control-sm" name="gia_thuong" value="{{ court.gia_thuong|floatformat:0 }}"></td>
+                        <td><input class="form-control form-control-sm" name="gia_co_dinh" value="{{ court.gia_co_dinh|floatformat:0 }}"></td>
+                        <td><input class="form-control form-control-sm" name="moTa" value="{{ court.moTa|default:'' }}"></td>
+                        <td>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="is_active" {% if court.is_active %}checked{% endif %}>
+                            </div>
+                        </td>
+                        <td class="text-end">
+                            <button class="btn btn-outline-primary btn-icon" type="submit" title="Lưu sân">
+                                <i class="fa-solid fa-floppy-disk"></i>
+                            </button>
+                        </td>
+                    </form>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7"><div class="empty-state">Chi nhánh này chưa có sân.</div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% empty %}
+<div class="panel"><div class="empty-state">Chưa có chi nhánh để quản lý.</div></div>
+{% endfor %}
+{% endblock %}

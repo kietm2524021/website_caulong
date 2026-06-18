@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Tạo Bài Viết Mới{% endblock %}
+
+{% block content %}
+<style>
+    .create-post-wrapper {
+        background-color: #f8f9fa;
+        min-height: 100vh;
+        padding: 40px 0;
+    }
+    .post-form-card {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+        border: none;
+        overflow: hidden;
+    }
+    .form-header {
+        background: linear-gradient(135deg, #11998e, #38ef7d);
+        padding: 20px 30px;
+        color: white;
+    }
+    
+    /* Custom File Upload */
+    .image-preview-container {
+        width: 100%;
+        height: 250px;
+        border: 2px dashed #ccc;
+        border-radius: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #fdfdfd;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+        transition: 0.3s;
+    }
+    .image-preview-container:hover { border-color: #11998e; background: #f0fff4; }
+    
+    .preview-img {
+        width: 100%; height: 100%; object-fit: cover; display: none;
+    }
+    .placeholder-text { text-align: center; color: #aaa; pointer-events: none; }
+    
+    .form-label { font-weight: 600; color: #495057; }
+</style>
+
+<div class="create-post-wrapper">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                
+                <nav aria-label="breadcrumb" class="mb-4">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="{% url 'dien_dan' %}" class="text-success text-decoration-none">Diễn đàn</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Tạo bài viết</li>
+                    </ol>
+                </nav>
+
+                <div class="post-form-card animate__animated animate__fadeInUp">
+                    <div class="form-header">
+                        <h4 class="mb-0 fw-bold"><i class="fa-solid fa-pen-to-square me-2"></i>VIẾT BÀI CHIA SẺ</h4>
+                        <small class="opacity-75">Bài viết sẽ được duyệt trước khi hiển thị công khai</small>
+                    </div>
+
+                    <div class="card-body p-4 p-md-5">
+                        <form method="post" enctype="multipart/form-data">
+                            {% csrf_token %}
+                            
+                            <div class="mb-4">
+                                <label class="form-label">Tiêu đề bài viết <span class="text-danger">*</span></label>
+                                {{ form.tieu_de }}
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label">Ảnh bìa minh họa</label>
+                                <div class="image-preview-container" onclick="document.getElementById('id_hinh_anh').click()">
+                                    <img id="imgPreview" class="preview-img" src="#" alt="Preview">
+                                    <div class="placeholder-text" id="placeholder">
+                                        <i class="fa-regular fa-image fa-3x mb-2"></i><br>
+                                        Nhấn để chọn ảnh
+                                    </div>
+                                </div>
+                                <div style="height: 0; overflow: hidden;">
+                                    {{ form.hinh_anh }}
+                                </div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label">Nội dung chi tiết <span class="text-danger">*</span></label>
+                                {{ form.noi_dung }}
+                                <div class="form-text">Bạn có thể chia sẻ kinh nghiệm, tìm người chơi, hoặc review sân bãi.</div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label"><i class="fa-solid fa-paperclip me-1"></i>File đính kèm (PDF/Doc)</label>
+                                {{ form.file_dinh_kem }}
+                            </div>
+
+                            <div class="d-flex gap-3 mt-5">
+                                <a href="{% url 'dien_dan' %}" class="btn btn-light rounded-pill px-4 fw-bold">Hủy bỏ</a>
+                                <button type="submit" class="btn btn-success rounded-pill px-5 fw-bold flex-grow-1">
+                                    <i class="fa-solid fa-paper-plane me-2"></i>GỬI BÀI VIẾT
+                                </button>
+                            </div>
+
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Script xem trước ảnh khi upload
+    const imgInput = document.getElementById('id_hinh_anh');
+    const preview = document.getElementById('imgPreview');
+    const placeholder = document.getElementById('placeholder');
+
+    imgInput.onchange = evt => {
+        const [file] = imgInput.files;
+        if (file) {
+            preview.src = URL.createObjectURL(file);
+            preview.style.display = 'block';
+            placeholder.style.display = 'none';
+        }
+    };
+</script>
+{% endblock %}

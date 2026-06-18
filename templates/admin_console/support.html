@@ -1,0 +1,147 @@
+{% extends 'admin_console/base.html' %}
+
+{% block title %}Hỗ Trợ Khách Hàng{% endblock %}
+{% block page_title %}Hỗ trợ khách hàng{% endblock %}
+{% block page_subtitle %}Xem hội thoại, phân biệt AI/admin và phản hồi trực tiếp cho khách{% endblock %}
+
+{% block extra_head %}
+<style>
+    .support-layout { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 14px; }
+    .thread-list { max-height: calc(100vh - 160px); overflow: auto; }
+    .thread-link { display: block; padding: 12px 14px; border-bottom: 1px solid #edf1f7; text-decoration: none; color: inherit; }
+    .thread-link:hover, .thread-link.active { background: #f0fdfa; }
+    .chat-stream { height: calc(100vh - 320px); overflow: auto; padding: 16px; background: #f8fafc; }
+    .chat-row { display: flex; margin-bottom: 14px; }
+    .chat-row.user { justify-content: flex-start; }
+    .chat-row.admin { justify-content: flex-end; }
+    .chat-bubble { max-width: 78%; border: 1px solid #dbe3ee; background: #fff; border-radius: 8px; padding: 10px 12px; }
+    .chat-row.admin .chat-bubble { background: #0f766e; color: #fff; border-color: #0f766e; }
+    .chat-meta { font-size: .72rem; opacity: .72; margin-top: 6px; }
+    .reply-box { border-top: 1px solid #dbe3ee; padding: 14px 16px; background: #fff; }
+    .top-actions { display: flex; gap: 8px; }
+    @media (max-width: 900px) { .support-layout { grid-template-columns: 1fr; } .chat-stream { height: 460px; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="support-layout">
+    <section class="panel">
+        <div class="panel-header">
+            <h2 class="panel-title">Hội thoại</h2>
+        </div>
+        <div class="thread-list">
+            {% for conversation in conversations %}
+            <a class="thread-link {% if active_conversation and active_conversation.id == conversation.id %}active{% endif %}" href="{% url 'admin_support_detail' conversation.id %}">
+                <div class="d-flex justify-content-between gap-2">
+                    <strong>{{ conversation.ten }}</strong>
+                    {% if conversation.unread_count %}
+                        <span class="status-pill st-pending">{{ conversation.unread_count }} mới</span>
+                    {% endif %}
+                </div>
+                <div class="muted small">{{ conversation.sodienthoai }}</div>
+                <div class="muted small">
+                    {% if conversation.chi_nhanh %}{{ conversation.chi_nhanh.tenChiNhanh }}{% else %}Chưa chọn chi nhánh{% endif %}
+                    · Quản lý:
+                    {% if conversation.admin_phu_trach %}
+                        {{ conversation.admin_phu_trach.ten|default:conversation.admin_phu_trach.username }}
+                    {% elif conversation.chi_nhanh %}
+                        {{ conversation.chi_nhanh.tenQuanLy }}
+                    {% else %}
+                        Bộ phận hỗ trợ
+                    {% endif %}
+                </div>
+                <div class="muted small mt-1">{{ conversation.last_message|date:"d/m H:i"|default:"Chưa có tin" }}</div>
+            </a>
+            {% empty %}
+            <div class="empty-state">Chưa có hội thoại hỗ trợ.</div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="panel">
+        {% if active_conversation %}
+        <div class="panel-header">
+            <div>
+                <h2 class="panel-title">{{ active_conversation.ten }}</h2>
+                <div class="muted small">
+                    Khách hàng: {{ active_conversation.ten }} · {{ active_conversation.sodienthoai }}<br>
+                    Chi nhánh: {% if active_conversation.chi_nhanh %}{{ active_conversation.chi_nhanh.tenChiNhanh }}{% else %}Chưa chọn{% endif %}
+                </div>
+            </div>
+            <div class="top-actions">
+                <button class="btn btn-warning btn-admin" type="button" onclick="leaveChat({{ active_conversation.id }})">Rời chat</button>
+                <button class="btn btn-danger btn-admin" type="button" onclick="deleteChat({{ active_conversation.id }})">Xóa lịch sử</button>
+            </div>
+        </div>
+        <div class="chat-stream">
+            {% for message in active_conversation.hotro_set.all %}
+                {% if message.nguoi_gui == 'admin' %}
+                    <div class="chat-row admin">
+                        <div class="chat-bubble">
+                            <strong>{{ message.admin_tra_loi.ten|default:"Admin" }}</strong><br>
+                            {{ message.cau_hoi|linebreaksbr }}
+                            <div class="chat-meta">{{ message.ngay_gui|date:"H:i d/m" }}</div>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="chat-row user">
+                        <div class="chat-bubble">
+                            {{ message.cau_hoi|linebreaksbr }}
+                            <div class="chat-meta">{{ message.ngay_gui|date:"H:i d/m" }}</div>
+                        </div>
+                    </div>
+                    {% if message.tra_loi %}
+                        <div class="chat-row admin">
+                            <div class="chat-bubble">
+                                <strong>{% if message.nguon_tra_loi == 'ai' %}AI hỗ trợ{% else %}{{ message.admin_tra_loi.ten|default:"Admin" }}{% endif %}</strong><br>
+                                {{ message.tra_loi|linebreaksbr }}
+                                <div class="chat-meta">{{ message.ngay_tra_loi|date:"H:i d/m" }}</div>
+                            </div>
+                        </div>
+                    {% endif %}
+                {% endif %}
+            {% empty %}
+                <div class="empty-state">Hội thoại này chưa có tin nhắn.</div>
+            {% endfor %}
+        </div>
+        <div class="reply-box">
+            <form method="post">
+                {% csrf_token %}
+                <label class="form-label small fw-bold">Phản hồi admin</label>
+                <div class="d-flex gap-2">
+                    <textarea class="form-control" name="tra_loi" rows="2" placeholder="Nhập phản hồi cho khách..." required></textarea>
+                    <button class="btn btn-primary btn-admin align-self-stretch" type="submit">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+        {% else %}
+        <div class="empty-state">Chọn một hội thoại để bắt đầu xử lý.</div>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function postSupportAction(url) {
+        const csrftoken = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+        const token = csrftoken ? decodeURIComponent(csrftoken[1]) : "";
+        const response = await fetch(url, {
+            method: "POST",
+            headers: {"Content-Type": "application/json", "X-CSRFToken": token},
+            body: JSON.stringify({conversation_id: {{ active_conversation.id|default:"null" }}})
+        });
+        if (response.ok) {
+            window.location.href = "{% url 'admin_support' %}";
+        }
+    }
+    function leaveChat() {
+        postSupportAction("{% url 'admin_support_widget_leave' %}");
+    }
+    function deleteChat() {
+        postSupportAction("{% url 'admin_support_widget_delete' %}");
+    }
+</script>
+{% endblock %}

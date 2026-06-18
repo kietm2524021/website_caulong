@@ -1,0 +1,260 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ site_config.ten_website }}{% endblock %}</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+
+    <style>
+        body { font-family: 'Lexend', sans-serif; background-color: #f8f9fa; min-height: 100vh; display: flex; flex-direction: column; }
+        .navbar { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+        .footer { margin-top: auto; background: #2d3436; color: #b2bec3; padding: 24px 0; }
+        .support-fab { position: fixed; left: 22px; bottom: 22px; z-index: 1040; width: 58px; height: 58px; border-radius: 50%; border: none; background: #0f766e; color: #fff; box-shadow: 0 12px 30px rgba(15, 118, 110, .35); display: flex; align-items: center; justify-content: center; font-size: 1.35rem; }
+        .support-panel { position: fixed; left: 22px; bottom: 92px; z-index: 1041; width: min(380px, calc(100vw - 28px)); height: 560px; max-height: calc(100vh - 120px); background: #fff; border: 1px solid #dbe3ee; border-radius: 12px; box-shadow: 0 24px 60px rgba(15, 23, 42, .18); display: none; overflow: hidden; }
+        .support-panel.open { display: flex; flex-direction: column; }
+        .support-panel-head { background: #0f172a; color: white; padding: 14px 16px; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+        .support-panel-body { flex: 1; overflow-y: auto; background: #f8fafc; padding: 14px; }
+        .support-panel-tools { padding: 12px 14px; border-bottom: 1px solid #edf1f7; background: #fff; }
+        .support-msg { margin-bottom: 10px; display: flex; }
+        .support-msg.user { justify-content: flex-end; }
+        .support-bubble { max-width: 84%; border: 1px solid #dbe3ee; background: white; color: #172033; border-radius: 10px; padding: 9px 11px; font-size: .88rem; line-height: 1.45; }
+        .support-msg.user .support-bubble { background: #0f766e; color: white; border-color: #0f766e; }
+        .support-meta { display: block; margin-top: 5px; font-size: .68rem; opacity: .72; }
+        .support-panel-form { padding: 12px; border-top: 1px solid #edf1f7; background: white; display: flex; gap: 8px; }
+        .support-panel-form input { border: 1px solid #dbe3ee; border-radius: 999px; padding: 10px 12px; flex: 1; min-width: 0; }
+        .support-panel-form button, .support-quick-admin { border: none; border-radius: 999px; background: #0f766e; color: white; font-weight: 700; padding: 9px 12px; }
+        .support-close { border: none; background: transparent; color: white; font-size: 1rem; }
+        .support-danger { background: #b91c1c; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="{% url 'home' %}"><i class="fa-solid fa-feather-pointed me-2"></i>{{ site_config.ten_website }}</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="mainNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link text-white" href="{% url 'home' %}">Trang chủ</a></li>
+                    <li class="nav-item"><a class="nav-link text-white" href="{% url 'lich_cong_dong' %}">Lịch sân</a></li>
+                    <li class="nav-item"><a class="nav-link text-white" href="{% url 'dien_dan' %}">Diễn đàn</a></li>
+                </ul>
+                <ul class="navbar-nav ms-auto">
+                    {% if user.is_authenticated %}
+                        {% if user.is_staff or user.is_superuser or user.role == 'staff' or user.role == 'manager' %}
+                        <li class="nav-item"><a class="btn btn-warning btn-sm fw-bold me-2" href="{% url 'admin_dashboard' %}"><i class="fa-solid fa-gauge-high me-1"></i>Bảng quản lý</a></li>
+                        {% endif %}
+                        <li class="nav-item"><span class="nav-link text-white">Chào, {{ user.ten }}</span></li>
+                        <li class="nav-item"><a class="btn btn-outline-light btn-sm ms-2" href="{% url 'logout' %}">Đăng xuất</a></li>
+                    {% else %}
+                        <li class="nav-item"><a class="btn btn-light text-success fw-bold btn-sm" href="{% url 'login' %}">Đăng nhập</a></li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid p-0">
+        {% if messages %}
+            <div class="container mt-3">
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% block content %}
+        {% endblock %}
+    </div>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="row g-3 align-items-center text-center text-md-start">
+                <div class="col-md-5">
+                    <div class="fw-bold text-white">{{ site_config.ten_website }}</div>
+                    <small>{{ site_config.footer_ghi_chu }}</small>
+                </div>
+                <div class="col-md-4">
+                    <small><i class="fa-solid fa-location-dot me-1"></i>{{ site_config.footer_dia_chi }}</small><br>
+                    <small><i class="fa-solid fa-phone me-1"></i>{{ site_config.footer_hotline }}</small>
+                </div>
+                <div class="col-md-3 text-md-end">
+                    {% if site_config.footer_email %}
+                        <small><i class="fa-solid fa-envelope me-1"></i>{{ site_config.footer_email }}</small><br>
+                    {% endif %}
+                    <small>&copy; 2026 {{ site_config.ten_website }}</small>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    {% if user.is_authenticated and not user.is_staff and not user.is_superuser and user.role == 'customer' %}
+    <button class="support-fab" id="supportFab" type="button" aria-label="Mở tin nhắn hỗ trợ">
+        <i class="fa-solid fa-comment-dots"></i>
+    </button>
+    <section class="support-panel" id="supportPanel" aria-label="Hỗ trợ khách hàng">
+        <div class="support-panel-head">
+            <div>
+                <div class="fw-bold">Hỗ trợ khách hàng</div>
+                <small id="supportManagerLabel" class="opacity-75">Đang kết nối hỗ trợ</small>
+            </div>
+            <button class="support-close" type="button" id="supportClose" aria-label="Đóng hỗ trợ"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="support-panel-tools">
+            <label class="small fw-bold text-muted mb-1">Chi nhánh cần hỗ trợ</label>
+            <select class="form-select form-select-sm mb-2" id="supportBranchSelect"></select>
+            <button class="support-quick-admin w-100" type="button" id="supportAdminRequest">
+                <i class="fa-solid fa-user-shield me-1"></i> Gặp quản lý chi nhánh
+            </button>
+            <button class="support-quick-admin support-danger w-100 mt-2" type="button" id="supportDeleteHistory">
+                <i class="fa-solid fa-trash me-1"></i> Xóa lịch sử chat
+            </button>
+        </div>
+        <div class="support-panel-body" id="supportMessages">
+            <div class="text-center text-muted small py-4">Đang tải hội thoại...</div>
+        </div>
+        <form class="support-panel-form" id="supportWidgetForm">
+            <input id="supportMessageInput" type="text" autocomplete="off" placeholder="Nhập tin nhắn hỗ trợ...">
+            <button type="submit" aria-label="Gửi tin nhắn"><i class="fa-solid fa-paper-plane"></i></button>
+        </form>
+    </section>
+    {% endif %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    {% if user.is_authenticated and not user.is_staff and not user.is_superuser and user.role == 'customer' %}
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const fab = document.getElementById("supportFab");
+            const panel = document.getElementById("supportPanel");
+            const closeBtn = document.getElementById("supportClose");
+            const messagesBox = document.getElementById("supportMessages");
+            const form = document.getElementById("supportWidgetForm");
+            const input = document.getElementById("supportMessageInput");
+            const branchSelect = document.getElementById("supportBranchSelect");
+            const adminRequest = document.getElementById("supportAdminRequest");
+            const deleteHistory = document.getElementById("supportDeleteHistory");
+            const managerLabel = document.getElementById("supportManagerLabel");
+
+            function csrfToken() {
+                const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+                return match ? decodeURIComponent(match[1]) : "";
+            }
+
+            function addBubble(type, text, meta) {
+                const row = document.createElement("div");
+                row.className = "support-msg " + type;
+                const bubble = document.createElement("div");
+                bubble.className = "support-bubble";
+                bubble.textContent = text;
+                if (meta) {
+                    const small = document.createElement("span");
+                    small.className = "support-meta";
+                    small.textContent = meta;
+                    bubble.appendChild(small);
+                }
+                row.appendChild(bubble);
+                messagesBox.appendChild(row);
+            }
+
+            function renderState(data) {
+                branchSelect.innerHTML = "";
+                data.branches.forEach(function(branch) {
+                    const option = document.createElement("option");
+                    option.value = branch.id;
+                    option.textContent = branch.name + " - " + branch.manager;
+                    if (data.conversation && data.conversation.branch_name === branch.name) option.selected = true;
+                    branchSelect.appendChild(option);
+                });
+                managerLabel.textContent = data.conversation ? ("Quản lý: " + data.conversation.manager_name) : "Đang kết nối hỗ trợ";
+
+                messagesBox.innerHTML = "";
+                if (!data.messages.length) {
+                    messagesBox.innerHTML = '<div class="text-center text-muted small py-4">Bạn có thể hỏi AI hoặc yêu cầu gặp quản lý chi nhánh.</div>';
+                }
+                data.messages.forEach(function(item) {
+                    if (item.sender === "admin") {
+                        addBubble("admin", item.question, (item.admin_name || "Admin") + " · " + item.sent_at);
+                        return;
+                    }
+                    addBubble("user", item.question, item.sent_at);
+                    if (item.reply) {
+                        addBubble("admin", item.reply, (item.admin_name || "Hỗ trợ") + " · " + item.replied_at);
+                    } else if (item.needs_admin) {
+                        addBubble("admin", "Yêu cầu đã được chuyển đến hàng chờ quản lý chi nhánh. Quản lý sẽ phản hồi trực tiếp tại đây.", "Đang chờ phản hồi");
+                    }
+                });
+                messagesBox.scrollTop = messagesBox.scrollHeight;
+            }
+
+            async function loadState() {
+                const response = await fetch("{% url 'support_widget_state' %}");
+                if (response.ok) renderState(await response.json());
+            }
+
+            async function sendMessage(message, forceAdmin) {
+                const response = await fetch("{% url 'support_widget_send' %}", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken()},
+                    body: JSON.stringify({
+                        message: message,
+                        branch_id: branchSelect.value,
+                        force_admin: forceAdmin
+                    })
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    renderState(data.state);
+                }
+            }
+
+            async function deleteConversation() {
+                const response = await fetch("{% url 'support_widget_delete' %}", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken()},
+                    body: JSON.stringify({})
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    renderState(data.state);
+                }
+            }
+
+            fab.addEventListener("click", function() {
+                panel.classList.toggle("open");
+                if (panel.classList.contains("open")) loadState();
+            });
+            closeBtn.addEventListener("click", function() { panel.classList.remove("open"); });
+            form.addEventListener("submit", async function(event) {
+                event.preventDefault();
+                const message = input.value.trim();
+                if (!message) return;
+                input.value = "";
+                await sendMessage(message, false);
+            });
+            adminRequest.addEventListener("click", async function() {
+                const selected = branchSelect.options[branchSelect.selectedIndex];
+                await sendMessage("Yêu cầu gặp quản lý " + (selected ? selected.textContent : "chi nhánh"), true);
+            });
+            deleteHistory.addEventListener("click", async function() {
+                await deleteConversation();
+            });
+
+            setInterval(function() {
+                if (panel.classList.contains("open")) loadState();
+            }, 12000);
+        });
+    </script>
+    {% endif %}
+</body>
+</html>

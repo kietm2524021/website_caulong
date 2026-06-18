@@ -1,0 +1,91 @@
+{% extends 'admin_console/base.html' %}
+{% load humanize %}
+
+{% block title %}Quản Lý Bài Viết{% endblock %}
+{% block page_title %}Bài viết diễn đàn{% endblock %}
+{% block page_subtitle %}Duyệt nội dung cộng đồng, ẩn bài hoặc xóa bài không phù hợp{% endblock %}
+
+{% block content %}
+<section class="panel mb-3">
+    <div class="panel-body">
+        <form method="get" class="tool-row">
+            <div>
+                <label class="form-label small fw-bold">Từ khóa</label>
+                <input class="form-control" name="q" value="{{ request.GET.q }}" placeholder="Tiêu đề, nội dung, tác giả">
+            </div>
+            <div>
+                <label class="form-label small fw-bold">Trạng thái</label>
+                <select class="form-select" name="status">
+                    <option value="">Tất cả</option>
+                    <option value="pending" {% if request.GET.status == 'pending' %}selected{% endif %}>Chờ duyệt</option>
+                    <option value="approved" {% if request.GET.status == 'approved' %}selected{% endif %}>Đã duyệt</option>
+                </select>
+            </div>
+            <button class="btn btn-primary btn-admin" type="submit"><i class="fa-solid fa-filter me-1"></i> Lọc</button>
+            <a class="btn btn-outline-secondary btn-admin" href="{% url 'admin_posts' %}">Xóa lọc</a>
+        </form>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-header">
+        <h2 class="panel-title">Danh sách bài viết</h2>
+        <span class="muted small">{{ posts.paginator.count|intcomma }} kết quả</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table-admin">
+            <thead>
+                <tr>
+                    <th>Bài viết</th>
+                    <th>Tác giả</th>
+                    <th>Ngày đăng</th>
+                    <th>Lượt xem</th>
+                    <th>Trạng thái</th>
+                    <th class="text-end">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for post in posts %}
+                <tr>
+                    <td>
+                        <strong>{{ post.tieu_de }}</strong><br>
+                        <span class="muted small">{{ post.noi_dung|truncatechars:120 }}</span>
+                    </td>
+                    <td>{{ post.nguoi_dang.ten|default:post.nguoi_dang.username }}<br><span class="muted small">{{ post.nguoi_dang.sodienthoai }}</span></td>
+                    <td>{{ post.ngay_dang|date:"d/m/Y H:i" }}</td>
+                    <td>{{ post.luot_xem|intcomma }}</td>
+                    <td>
+                        {% if post.duyet_bai %}
+                            <span class="status-pill st-confirmed">Đã duyệt</span>
+                        {% else %}
+                            <span class="status-pill st-pending">Chờ duyệt</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
+                            <a class="btn btn-outline-secondary btn-icon" href="{% url 'chi_tiet_bai_viet' post.id %}" target="_blank" title="Xem"><i class="fa-solid fa-eye"></i></a>
+                            <form method="post" action="{% url 'admin_post_action' post.id %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <input type="hidden" name="action" value="{% if post.duyet_bai %}hide{% else %}approve{% endif %}">
+                                <button class="btn btn-outline-success btn-icon" title="{% if post.duyet_bai %}Ẩn{% else %}Duyệt{% endif %}">
+                                    <i class="fa-solid {% if post.duyet_bai %}fa-eye-slash{% else %}fa-check{% endif %}"></i>
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'admin_post_action' post.id %}" onsubmit="return confirm('Xóa bài viết này?')">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <input type="hidden" name="action" value="delete">
+                                <button class="btn btn-outline-danger btn-icon" title="Xóa"><i class="fa-solid fa-trash"></i></button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6"><div class="empty-state">Không có bài viết phù hợp.</div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

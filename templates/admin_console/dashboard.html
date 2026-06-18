@@ -1,0 +1,168 @@
+{% extends 'admin_console/base.html' %}
+{% load humanize %}
+
+{% block title %}Tổng Quan Quản Trị{% endblock %}
+{% block page_title %}Tổng quan vận hành{% endblock %}
+{% block page_subtitle %}Theo dõi đơn đặt sân, doanh thu, hỗ trợ và nội dung cần xử lý{% endblock %}
+
+{% block content %}
+<div class="stat-grid mb-3">
+    <div class="stat-box">
+        <div class="stat-label">Lịch hôm nay</div>
+        <div class="stat-value">{{ stats.today_bookings|intcomma }}</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-label">Đơn chờ duyệt</div>
+        <div class="stat-value">{{ stats.pending_bookings|intcomma }}</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-label">Chưa thanh toán</div>
+        <div class="stat-value">{{ stats.unpaid_bookings|intcomma }}</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-label">Doanh thu tháng</div>
+        <div class="stat-value">{{ stats.month_revenue|intcomma }}đ</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-label">Sân hoạt động</div>
+        <div class="stat-value">{{ stats.active_courts|intcomma }}</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-label">Bài chờ duyệt</div>
+        <div class="stat-value">{{ stats.pending_posts|intcomma }}</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-label">Tin hỗ trợ mới</div>
+        <div class="stat-value">{{ stats.unread_support|intcomma }}</div>
+    </div>
+    <div class="stat-box">
+        <div class="stat-label">Khách hàng</div>
+        <div class="stat-value">{{ stats.customers|intcomma }}</div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-xl-7">
+        <section class="panel">
+            <div class="panel-header">
+                <h2 class="panel-title">Lịch sân hôm nay</h2>
+                <a class="btn btn-outline-primary btn-admin" href="{% url 'admin_bookings' %}">Xem đơn</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table-admin">
+                    <thead>
+                        <tr>
+                            <th>Giờ</th>
+                            <th>Khách</th>
+                            <th>Sân</th>
+                            <th>Thanh toán</th>
+                            <th>Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for booking in today_schedule %}
+                        <tr>
+                            <td>{{ booking.gioBatDau|date:"H:i" }} - {{ booking.gioKetThuc|date:"H:i" }}</td>
+                            <td>
+                                <strong>{{ booking.tenNguoiDat }}</strong><br>
+                                <span class="muted small">{{ booking.sdt }}</span>
+                            </td>
+                            <td>{{ booking.san.tenSan }}<br><span class="muted small">{{ booking.san.maChiNhanh.tenChiNhanh }}</span></td>
+                            <td>
+                                {% if booking.daThanhToan %}
+                                    <span class="status-pill st-confirmed">Đã thanh toán</span>
+                                {% else %}
+                                    <span class="status-pill st-pending">Chưa thanh toán</span>
+                                {% endif %}
+                            </td>
+                            <td><span class="status-pill st-{{ booking.trangThai }}">{{ booking.get_trangThai_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5"><div class="empty-state">Hôm nay chưa có lịch sân.</div></td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-xl-5">
+        <section class="panel mb-3">
+            <div class="panel-header">
+                <h2 class="panel-title">Hỗ trợ cần chú ý</h2>
+                <span class="muted small">Mở icon tin nhắn góc trái dưới để trả lời</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table-admin">
+                    <tbody>
+                        {% for thread in support_threads %}
+                        <tr>
+                            <td>
+                                <strong>{{ thread.ten }}</strong><br>
+                                <span class="muted small">{{ thread.sodienthoai }}</span>
+                            </td>
+                            <td class="text-end"><span class="status-pill st-pending">Chờ trả lời</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td><div class="empty-state">Chưa có hội thoại hỗ trợ.</div></td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+
+<section class="panel mt-3">
+    <div class="panel-header">
+        <h2 class="panel-title">Đơn mới gần đây</h2>
+        <a class="btn btn-outline-primary btn-admin" href="{% url 'admin_bookings' %}?status=pending">Duyệt nhanh</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table-admin">
+            <thead>
+                <tr>
+                    <th>Mã</th>
+                    <th>Khách hàng</th>
+                    <th>Sân</th>
+                    <th>Ngày giờ</th>
+                    <th>Tổng tiền</th>
+                    <th>Trạng thái</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for booking in recent_bookings %}
+                <tr>
+                    <td>
+                        #{% if booking.loaiDatSan == 1 %}{{ booking.nhom_dat_san|stringformat:".8s" }}{% else %}{{ booking.id }}{% endif %}
+                        {% if booking.admin_is_group %}
+                            <br><span class="status-pill st-completed">{{ booking.admin_group_count }} buổi</span>
+                        {% endif %}
+                    </td>
+                    <td><strong>{{ booking.tenNguoiDat }}</strong><br><span class="muted small">{{ booking.sdt }}</span></td>
+                    <td>{{ booking.san.tenSan }}<br><span class="muted small">{{ booking.san.maChiNhanh.tenChiNhanh }}</span></td>
+                    <td>
+                        {% if booking.admin_is_group and booking.admin_group_first_date != booking.admin_group_last_date %}
+                            {{ booking.admin_group_first_date|date:"d/m/Y" }} - {{ booking.admin_group_last_date|date:"d/m/Y" }}
+                        {% else %}
+                            {{ booking.ngayBatDau|date:"d/m/Y" }}
+                        {% endif %}
+                        <br><span class="muted small">{{ booking.gioBatDau|date:"H:i" }} - {{ booking.gioKetThuc|date:"H:i" }}</span>
+                    </td>
+                    <td>{{ booking.admin_group_total|floatformat:0|intcomma }}đ</td>
+                    <td><span class="status-pill st-{{ booking.trangThai }}">{{ booking.get_trangThai_display }}</span></td>
+                    <td class="text-end">
+                        <a class="btn btn-outline-secondary btn-icon" href="{% url 'xuat_hoa_don' booking.id %}" title="Hóa đơn">
+                            <i class="fa-solid fa-file-invoice"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7"><div class="empty-state">Chưa có đơn đặt sân.</div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

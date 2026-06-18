@@ -1,0 +1,230 @@
+{% extends 'admin_console/base.html' %}
+{% load humanize %}
+
+{% block title %}Quản Lý Đơn Đặt Sân{% endblock %}
+{% block page_title %}Đơn đặt sân{% endblock %}
+{% block page_subtitle %}Tiếp nhận yêu cầu, gửi thông tin đặt cọc và duyệt đơn sau khi đối soát{% endblock %}
+
+{% block content %}
+<section class="panel mb-3">
+    <div class="panel-header">
+        <h2 class="panel-title">Bộ lọc vận hành</h2>
+    </div>
+    <div class="panel-body">
+        <form method="get" class="tool-row">
+            <div>
+                <label class="form-label small fw-bold">Từ khóa</label>
+                <input class="form-control" type="text" name="q" value="{{ request.GET.q }}" placeholder="Tên, SĐT, sân, CK">
+            </div>
+            <div>
+                <label class="form-label small fw-bold">Trạng thái</label>
+                <select class="form-select" name="status">
+                    <option value="">Tất cả</option>
+                    {% for value,label in status_choices %}
+                        <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label small fw-bold">Thanh toán</label>
+                <select class="form-select" name="pay">
+                    <option value="">Tất cả</option>
+                    <option value="paid" {% if request.GET.pay == 'paid' %}selected{% endif %}>Đã thanh toán</option>
+                    <option value="unpaid" {% if request.GET.pay == 'unpaid' %}selected{% endif %}>Chưa thanh toán</option>
+                </select>
+            </div>
+            <div>
+                <label class="form-label small fw-bold">Chi nhánh</label>
+                <select class="form-select" name="branch">
+                    <option value="">Tất cả</option>
+                    {% for branch in branches %}
+                        <option value="{{ branch.id }}" {% if request.GET.branch == branch.id|stringformat:"s" %}selected{% endif %}>{{ branch.tenChiNhanh }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label small fw-bold">Từ ngày</label>
+                <input class="form-control" type="date" name="from" value="{{ request.GET.from }}">
+            </div>
+            <div>
+                <label class="form-label small fw-bold">Đến ngày</label>
+                <input class="form-control" type="date" name="to" value="{{ request.GET.to }}">
+            </div>
+            <button class="btn btn-primary btn-admin" type="submit"><i class="fa-solid fa-filter me-1"></i> Lọc</button>
+            <a class="btn btn-outline-secondary btn-admin" href="{% url 'admin_bookings' %}">Xóa lọc</a>
+        </form>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-header">
+        <h2 class="panel-title">Danh sách đơn</h2>
+        <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+            <span class="muted small">{{ bookings.paginator.count|intcomma }} kết quả</span>
+            <form method="post" action="{% url 'admin_booking_bulk_action' %}" id="bulkBookingForm" class="d-inline-flex gap-2 flex-wrap justify-content-end">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button class="btn btn-danger btn-admin" type="submit" name="action" value="delete" onclick="return confirmBulkAction('xóa vĩnh viễn');">
+                    <i class="fa-solid fa-trash me-1"></i>Xóa đã chọn
+                </button>
+            </form>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table-admin">
+            <thead>
+                <tr>
+                    <th style="width: 42px;">
+                        <input class="form-check-input" type="checkbox" id="selectAllBookings" title="Chọn tất cả">
+                    </th>
+                    <th>Mã</th>
+                    <th>Khách hàng</th>
+                    <th>Sân</th>
+                    <th>Ngày giờ</th>
+                    <th>Loại</th>
+                    <th>Thanh toán</th>
+                    <th>Trạng thái</th>
+                    <th>Người duyệt</th>
+                    <th class="text-end">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for booking in bookings %}
+                <tr>
+                    <td>
+                        <input class="form-check-input booking-select" type="checkbox" name="booking_ids" value="{{ booking.id }}" form="bulkBookingForm" aria-label="Chọn đơn #{{ booking.id }}">
+                    </td>
+                    <td>
+                        <strong>#{% if booking.loaiDatSan == 1 %}{{ booking.nhom_dat_san|stringformat:".8s" }}{% else %}{{ booking.id }}{% endif %}</strong><br>
+                        {% if booking.admin_is_group %}
+                            <span class="status-pill st-completed">{{ booking.admin_group_count }} buổi</span><br>
+                        {% endif %}
+                        <span class="muted small">{{ booking.ngay_tao|date:"d/m H:i" }}</span>
+                    </td>
+                    <td>
+                        <strong>{{ booking.tenNguoiDat }}</strong><br>
+                        <span class="muted small">{{ booking.sdt }}</span>
+                    </td>
+                    <td>
+                        {{ booking.san.tenSan }}<br>
+                        <span class="muted small">{{ booking.san.maChiNhanh.tenChiNhanh }}</span>
+                    </td>
+                    <td>
+                        {% if booking.admin_is_group and booking.admin_group_first_date != booking.admin_group_last_date %}
+                            {{ booking.admin_group_first_date|date:"d/m/Y" }} - {{ booking.admin_group_last_date|date:"d/m/Y" }}<br>
+                        {% else %}
+                            {{ booking.ngayBatDau|date:"d/m/Y" }}<br>
+                        {% endif %}
+                        <span class="muted small">{{ booking.gioBatDau|date:"H:i" }} - {{ booking.gioKetThuc|date:"H:i" }}</span>
+                    </td>
+                    <td>
+                        {{ booking.get_loaiDatSan_display }}
+                        {% if booking.admin_is_group %}
+                            <div class="muted small">{{ booking.get_lich_tap_display }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <strong>{{ booking.admin_group_total|floatformat:0|intcomma }}đ</strong><br>
+                        {% if booking.daThanhToan %}
+                            <span class="status-pill st-confirmed">Đã thanh toán</span>
+                        {% else %}
+                            <span class="status-pill st-pending">Chưa thanh toán</span>
+                        {% endif %}
+                        <div class="muted small mt-1">Cọc: {{ booking.admin_group_deposit|floatformat:0|intcomma }}đ</div>
+                    </td>
+                    <td><span class="status-pill st-{{ booking.trangThai }}">{{ booking.get_trangThai_display }}</span></td>
+                    <td>{% if booking.nguoi_duyet %}{{ booking.nguoi_duyet.ten|default:booking.nguoi_duyet.username }}{% else %}<span class="muted">Chưa duyệt</span>{% endif %}</td>
+                    <td class="text-end">
+                        <div class="d-inline-flex gap-1 flex-wrap justify-content-end">
+                            {% if booking.trangThai == 'confirmed' or booking.trangThai == 'completed' %}
+                                <a class="btn btn-outline-secondary btn-icon" href="{% url 'xuat_hoa_don' booking.id %}" title="Hóa đơn"><i class="fa-solid fa-file-invoice"></i></a>
+                            {% endif %}
+                            {% if booking.trangThai == 'pending' and not booking.khach_xac_nhan_chuyen_khoan %}
+                                <form method="post" action="{% url 'admin_booking_action' booking.id %}">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    <input type="hidden" name="action" value="request_payment">
+                                    <button class="btn btn-outline-primary btn-icon" title="Gửi yêu cầu đặt cọc"><i class="fa-solid fa-qrcode"></i></button>
+                                </form>
+                            {% elif booking.trangThai == 'pending' and booking.khach_xac_nhan_chuyen_khoan %}
+                                <form method="post" action="{% url 'admin_booking_action' booking.id %}">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    <input type="hidden" name="action" value="mark_transfer_received">
+                                    <button class="btn btn-outline-success btn-icon" title="Xác nhận đã nhận cọc và duyệt đơn"><i class="fa-solid fa-check"></i></button>
+                                </form>
+                            {% endif %}
+                            <form method="post" action="{% url 'admin_booking_action' booking.id %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <input type="hidden" name="action" value="cancel">
+                                <button class="btn btn-outline-danger btn-icon" title="Hủy"><i class="fa-solid fa-xmark"></i></button>
+                            </form>
+                            <form method="post" action="{% url 'admin_booking_action' booking.id %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                <input type="hidden" name="action" value="delete">
+                                <button class="btn btn-danger btn-icon" title="Xóa đơn" onclick="return confirm('Xóa hẳn đơn này khỏi hệ thống?');"><i class="fa-solid fa-trash"></i></button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="10"><div class="empty-state">Không có đơn phù hợp bộ lọc.</div></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% if bookings.paginator.num_pages > 1 %}
+<nav>
+    <ul class="pagination">
+        {% if bookings.has_previous %}
+            <li class="page-item"><a class="page-link" href="?page={{ bookings.previous_page_number }}">Trước</a></li>
+        {% endif %}
+        <li class="page-item active"><span class="page-link">{{ bookings.number }}/{{ bookings.paginator.num_pages }}</span></li>
+        {% if bookings.has_next %}
+            <li class="page-item"><a class="page-link" href="?page={{ bookings.next_page_number }}">Sau</a></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function checkedBookingCount() {
+        return document.querySelectorAll(".booking-select:checked").length;
+    }
+
+    function confirmBulkAction(actionLabel) {
+        const count = checkedBookingCount();
+        if (!count) {
+            alert("Bạn chưa chọn đơn nào.");
+            return false;
+        }
+        return confirm(`Bạn có chắc muốn ${actionLabel} ${count} đơn đã chọn?`);
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        const selectAll = document.getElementById("selectAllBookings");
+        const boxes = Array.from(document.querySelectorAll(".booking-select"));
+        if (!selectAll) return;
+
+        selectAll.addEventListener("change", function() {
+            boxes.forEach(function(box) {
+                box.checked = selectAll.checked;
+            });
+        });
+
+        boxes.forEach(function(box) {
+            box.addEventListener("change", function() {
+                const selected = checkedBookingCount();
+                selectAll.checked = selected === boxes.length && boxes.length > 0;
+                selectAll.indeterminate = selected > 0 && selected < boxes.length;
+            });
+        });
+    });
+</script>
+{% endblock %}
