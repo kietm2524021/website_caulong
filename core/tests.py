@@ -157,6 +157,13 @@ class BookingSupportInvoiceTests(TestCase):
         self.assertContains(response, 'value="Giao lưu vui vẻ, chia đều tiền sân."')
         self.assertNotContains(response, "Phương thức thanh toán")
 
+    def test_home_uses_badminton_court_photo_instead_of_table_tennis_icon(self):
+        response = self.client.get(reverse("home"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "photo-1617696618050-b0fef0c666af")
+        self.assertContains(response, 'alt="Sân cầu lông trong nhà San 1"')
+        self.assertNotContains(response, "fa-table-tennis-paddle-ball")
+
     def test_fixed_booking_conflict_blocks_all_matching_days(self):
         monday = timezone.now().date()
         while monday.weekday() != 0:

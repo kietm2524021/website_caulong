@@ -97,16 +97,15 @@
     }
 
     .court-icon-wrapper {
-        height: 180px; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-        display: flex; align-items: center; justify-content: center;
+        height: 180px; background: #dbeafe;
         position: relative; overflow: hidden;
     }
-    
-    .court-icon-main {
-        font-size: 5rem; color: var(--primary-green); opacity: 0.8;
-        transition: 0.5s;
+
+    .court-image {
+        width: 100%; height: 100%; object-fit: cover; object-position: center;
+        transition: transform 0.5s ease;
     }
-    .court-box:hover .court-icon-main { transform: scale(1.1) rotate(-10deg); }
+    .court-box:hover .court-image { transform: scale(1.06); }
 
     .price-tag {
         position: absolute; bottom: 15px; right: 15px;
@@ -257,7 +256,12 @@
                 <div class="col-xl-3 col-lg-4 col-md-6">
                     <div class="court-box">
                         <div class="court-icon-wrapper">
-                            <i class="fa-solid fa-table-tennis-paddle-ball court-icon-main"></i>
+                            <img
+                                class="court-image"
+                                src="https://images.unsplash.com/photo-1617696618050-b0fef0c666af?auto=format&amp;fit=crop&amp;w=800&amp;h=480&amp;q=82"
+                                alt="Sân cầu lông trong nhà {{ court.tenSan }}"
+                                loading="lazy"
+                            >
                             <div class="price-tag num-font">{{ court.gia_thuong|dotsep }} đ <small class="text-muted">/h</small></div>
                         </div>
                         
