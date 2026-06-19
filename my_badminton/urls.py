@@ -5,7 +5,7 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('members.urls')),
+    path('', include('core.urls')),
 ]
 
 # Đoạn này giúp Django phục vụ file static và media khi đang chạy DEBUG = True

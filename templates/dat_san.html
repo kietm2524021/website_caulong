@@ -247,7 +247,7 @@
             const form = document.getElementById('bookingForm');
             const priceStd = parseInt(form.dataset.priceStd) || 0;     // gia_thuong
             const priceGold = parseInt(form.dataset.priceGold) || 0;   // gia_vang
-            const priceFixed = parseInt(form.dataset.priceFixed) || 0; // gia_co_dinh
+            const priceFixed = parseInt(form.dataset.priceFixed) || 0; // gia_co_dinh mỗi giờ
 
             let total = 0;
             let count = 1;
@@ -255,7 +255,7 @@
 
             // --- KIỂM TRA LOẠI HÌNH ĐẶT SÂN ---
             if (typeSelect.value === '1') { 
-                // === A. CỐ ĐỊNH (Sử dụng gia_co_dinh đồng nhất) ===
+                // === A. CỐ ĐỊNH (số giờ × giá cố định × số buổi) ===
                 document.getElementById('previewType').innerText = "Cố định";
                 
                 if (endDateStr) {

@@ -48,7 +48,7 @@ def natural_sort_key(value):
 def tinh_tien_chi_tiet(san, loai_dat, gio_bd, gio_kt):
     """
     Tính tiền dựa trên 3 loại giá:
-    - loai_dat = 1 (Cố định): Áp dụng san.gia_co_dinh (đơn giá ưu đãi).
+    - loai_dat = 1 (Cố định): Số giờ nhân với giá cố định của sân.
     - loai_dat = 0 (Vãng lai): Phân loại Giờ Vàng (7h-17h) và giờ Thường.
     """
     start = Decimal(gio_bd.hour) + Decimal(gio_bd.minute) / 60
@@ -56,7 +56,7 @@ def tinh_tien_chi_tiet(san, loai_dat, gio_bd, gio_kt):
     duration = end - start
     if duration <= 0: return 0
     
-    # 1. TRƯỜNG HỢP ĐẶT CỐ ĐỊNH: Một mức giá duy nhất cho mọi khung giờ
+    # Giá sân cố định và tiền cọc 10.000đ/buổi là hai khoản riêng biệt.
     if int(loai_dat) == 1:
         return duration * san.gia_co_dinh
 
@@ -433,6 +433,7 @@ def chi_tiet_dat_coc(request, booking_id):
         'tong_tien': total_price,
         'so_tien_coc': total_deposit,
         'so_tien_con_lai': max(total_price - total_deposit, Decimal('0')),
+        'noi_dung_chuyen_khoan': booking.tao_noi_dung_chuyen_khoan(tien_coc=total_deposit),
         'han_thanh_toan': booking.han_thanh_toan,
         'het_han': booking.yeu_cau_thanh_toan_het_han,
         'co_the_xac_nhan': booking.trangThai == 'pending' and not booking.khach_xac_nhan_chuyen_khoan and not booking.yeu_cau_thanh_toan_het_han,
@@ -525,6 +526,12 @@ def tao_tom_tat_hoa_don(don, chi_tiet, tong_tien):
     is_group = don.loaiDatSan == 1 and don.nhom_dat_san
     statuses = {item.get_trangThai_display() for item in items}
     status_label = statuses.pop() if len(statuses) == 1 else don.get_trangThai_display()
+    tien_da_coc = sum(
+        (Decimal(item.so_tien_coc or 0) for item in items if item.daThanhToan),
+        Decimal('0'),
+    )
+    con_lai = max(Decimal(tong_tien or 0) - tien_da_coc, Decimal('0'))
+    total_deposit = sum((Decimal(item.so_tien_coc or 0) for item in items), Decimal('0'))
 
     return {
         'is_group': is_group,
@@ -540,6 +547,9 @@ def tao_tom_tat_hoa_don(don, chi_tiet, tong_tien):
         'trang_thai': status_label,
         'don_gia': first_item.tongGiaTien,
         'tong_tien': tong_tien,
+        'tien_da_coc': tien_da_coc,
+        'con_lai': con_lai,
+        'noi_dung_chuyen_khoan': don.tao_noi_dung_chuyen_khoan(tien_coc=total_deposit),
     }
 
 
@@ -561,13 +571,16 @@ def lay_du_lieu_hoa_don(request, booking_id):
     tong_tien = chi_tiet.aggregate(Sum('tongGiaTien'))['tongGiaTien__sum'] or 0
     nguoi_duyet = chi_tiet.filter(nguoi_duyet__isnull=False).select_related('nguoi_duyet').first()
     chi_tiet = list(chi_tiet)
+    tom_tat = tao_tom_tat_hoa_don(don, chi_tiet, tong_tien)
 
     return {
         'don': don,
         'chi_tiet': chi_tiet,
         'tong_tien': tong_tien,
+        'tien_da_coc': tom_tat['tien_da_coc'],
+        'con_lai': tom_tat['con_lai'],
         'nguoi_duyet': nguoi_duyet.nguoi_duyet if nguoi_duyet else None,
-        'tom_tat_hoa_don': tao_tom_tat_hoa_don(don, chi_tiet, tong_tien),
+        'tom_tat_hoa_don': tom_tat,
     }
 
 

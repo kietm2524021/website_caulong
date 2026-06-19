@@ -213,7 +213,8 @@ def perform_booking_action(request, booking, action):
     if action == "request_payment":
         if booking.trangThai != "pending":
             return "Chỉ có thể gửi yêu cầu đặt cọc cho đơn đang chờ xử lý."
-        for item in target:
+        items = list(target)
+        for item in items:
             item.so_tien_coc = item.tinh_tien_coc_mac_dinh()
             item.yeu_cau_thanh_toan = True
             item.ngay_gui_yeu_cau_thanh_toan = now
@@ -227,6 +228,9 @@ def perform_booking_action(request, booking, action):
                 "khach_xac_nhan_chuyen_khoan", "ngay_khach_xac_nhan_ck", "daThanhToan",
                 "nguoi_duyet", "noi_dung_chuyen_khoan",
             ])
+        total_deposit = sum((item.so_tien_coc or Decimal("0")) for item in items)
+        transfer_content = booking.tao_noi_dung_chuyen_khoan(tien_coc=total_deposit)
+        target.update(noi_dung_chuyen_khoan=transfer_content)
         ThongBao.objects.create(
             nguoi_nhan=booking.nguoi_dat,
             tieu_de="Quản lý đã gửi yêu cầu đặt cọc",

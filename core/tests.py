@@ -92,6 +92,7 @@ class BookingSupportInvoiceTests(TestCase):
         self.assertEqual(tinh_tien_chi_tiet(self.court_1, 0, time(18, 0), time(19, 0)), Decimal("80000"))
         self.assertEqual(tinh_tien_chi_tiet(self.court_1, 0, time(16, 30), time(17, 30)), Decimal("65000.0"))
         self.assertEqual(tinh_tien_chi_tiet(self.court_1, 1, time(18, 0), time(19, 0)), Decimal("40000"))
+        self.assertEqual(tinh_tien_chi_tiet(self.court_1, 1, time(18, 0), time(20, 0)), Decimal("80000"))
 
     def test_booking_generates_deposit_transfer_content(self):
         booking_date = timezone.now().date() + timedelta(days=3)
@@ -113,6 +114,8 @@ class BookingSupportInvoiceTests(TestCase):
     def test_booking_form_has_recruitment_defaults_and_no_payment_method_box(self):
         response = self.client.get(f"{reverse('dat_san')}?san_id={self.court_1.id}")
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-price-fixed="40000"')
+        self.assertContains(response, "total += duration * priceFixed;")
         self.assertContains(response, 'name="soLuongTuyen" value="1"')
         self.assertContains(response, '<option value="yeu" selected>')
         self.assertContains(response, 'value="Giao lưu vui vẻ, chia đều tiền sân."')
@@ -166,8 +169,16 @@ class BookingSupportInvoiceTests(TestCase):
         self.assertContains(response, "15 buổi")
         content = response.content.decode("utf-8")
         self.assertIn("600.000đ", content)
+        fixed_bookings = DatSan.objects.filter(san=self.court_1, loaiDatSan=1)
+        self.assertEqual(fixed_bookings.count(), 15)
+        self.assertFalse(fixed_bookings.exclude(tongGiaTien=Decimal("40000")).exists())
         self.assertEqual(content.count('class="form-check-input booking-select"'), 1)
         self.assertContains(response, 'id="selectAllBookings"')
+
+        first_booking = fixed_bookings.order_by("ngayBatDau").first()
+        invoice = self.client.get(reverse("xuat_hoa_don", args=[first_booking.id]))
+        self.assertContains(invoice, "40.000đ")
+        self.assertContains(invoice, "600.000đ")
 
     @patch.dict(os.environ, {"AI_SUPPORT_ENABLED": "False"}, clear=False)
     def test_support_auto_reply_and_admin_handoff(self):
@@ -349,7 +360,7 @@ class BookingSupportInvoiceTests(TestCase):
             reply = response.json()["state"]["messages"][-1]["reply"]
             self.assertIn(expected, reply, question)
 
-    @patch("members.support_ai.requests.post")
+    @patch("core.support_ai.requests.post")
     @patch.dict(
         os.environ,
         {
@@ -380,7 +391,9 @@ class BookingSupportInvoiceTests(TestCase):
             ngayBatDau=booking_date,
             gioBatDau=time(17, 0),
             gioKetThuc=time(18, 0),
-            tongGiaTien=50000,
+            tongGiaTien=1000000,
+            so_tien_coc=300000,
+            daThanhToan=True,
             trangThai="confirmed",
             nguoi_duyet=self.admin,
         )
@@ -392,6 +405,12 @@ class BookingSupportInvoiceTests(TestCase):
         self.assertContains(response, "San 1")
         self.assertContains(response, "17:00 - 18:00")
         self.assertContains(response, "Admin Test")
+        self.assertContains(response, "Tổng tiền")
+        self.assertContains(response, "1.000.000đ")
+        self.assertContains(response, "Đã cọc")
+        self.assertContains(response, "300.000đ")
+        self.assertContains(response, "Còn phải thanh toán")
+        self.assertContains(response, "700.000đ")
 
     def test_fixed_booking_invoice_is_compact_summary(self):
         group_id = uuid.uuid4()
@@ -417,6 +436,8 @@ class BookingSupportInvoiceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Lịch cố định")
         self.assertContains(response, "15 buổi")
+        self.assertContains(response, "40.000đ")
+        self.assertContains(response, "600.000đ")
         self.assertContains(response, "Gộp toàn bộ đơn trong cùng lịch cố định.")
         self.assertContains(response, start_date.strftime("%d/%m/%Y"))
         self.assertContains(response, (start_date + timedelta(days=14)).strftime("%d/%m/%Y"))
@@ -679,6 +700,30 @@ class BookingSupportInvoiceTests(TestCase):
             DatSan.objects.filter(nhom_dat_san=group_id).aggregate(Sum("so_tien_coc"))["so_tien_coc__sum"],
             Decimal("300000"),
         )
+        first_booking = DatSan.objects.filter(nhom_dat_san=group_id).order_by("ngayBatDau").first()
+        self.client.force_login(self.admin)
+        self.client.post(
+            reverse("admin_booking_action", args=[first_booking.id]),
+            {"action": "request_payment"},
+        )
+        expected_content = first_booking.tao_noi_dung_chuyen_khoan(tien_coc=Decimal("300000"))
+        self.assertEqual(
+            set(
+                DatSan.objects.filter(nhom_dat_san=group_id).values_list(
+                    "noi_dung_chuyen_khoan", flat=True
+                )
+            ),
+            {expected_content},
+        )
+
+        self.client.force_login(self.user)
+        self.client.post(reverse("mo_yeu_cau_dat_coc", args=[first_booking.id]))
+        detail = self.client.get(reverse("chi_tiet_dat_coc", args=[first_booking.id]))
+        self.assertContains(detail, "1.200.000đ")
+        self.assertContains(detail, "300.000đ")
+        self.assertContains(detail, "900.000đ")
+        self.assertContains(detail, f'data-copy="{expected_content}"')
+        self.assertContains(detail, f"<code>{expected_content}</code>", html=True)
 
     def test_admin_only_approves_after_customer_confirms_transfer(self):
         self.client.force_login(self.admin)

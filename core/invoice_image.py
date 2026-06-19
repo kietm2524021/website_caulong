@@ -1,5 +1,6 @@
 from io import BytesIO
 from pathlib import Path
+from decimal import Decimal
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -150,6 +151,11 @@ def build_summary_from_items(booking, items, total_money):
     is_group = booking.loaiDatSan == 1 and booking.nhom_dat_san
     statuses = {item.get_trangThai_display() for item in items}
     status_label = statuses.pop() if len(statuses) == 1 else booking.get_trangThai_display()
+    paid_deposit = sum(
+        (Decimal(item.so_tien_coc or 0) for item in items if item.daThanhToan),
+        Decimal("0"),
+    )
+    total_deposit = sum((Decimal(item.so_tien_coc or 0) for item in items), Decimal("0"))
     return {
         "is_group": is_group,
         "title": "Lịch cố định" if is_group else "Đặt sân vãng lai",
@@ -163,6 +169,9 @@ def build_summary_from_items(booking, items, total_money):
         "trang_thai": status_label,
         "don_gia": first_item.tongGiaTien,
         "tong_tien": total_money,
+        "tien_da_coc": paid_deposit,
+        "con_lai": max(Decimal(total_money or 0) - paid_deposit, Decimal("0")),
+        "noi_dung_chuyen_khoan": booking.tao_noi_dung_chuyen_khoan(tien_coc=total_deposit),
     }
 
 
@@ -198,7 +207,7 @@ def render_invoice_png(booking, items, total_money, approver=None, summary=None)
         ("Trạng thái", summary["trang_thai"]),
         ("Người duyệt", approver_name(approver)),
         ("Số buổi", f"{summary['so_buoi']} buổi"),
-        ("Nội dung chuyển khoản", booking.noi_dung_chuyen_khoan or "-"),
+        ("Nội dung chuyển khoản", summary["noi_dung_chuyen_khoan"] or "-"),
     ]
 
     for idx, (label, value) in enumerate(fields):
@@ -248,9 +257,16 @@ def render_invoice_png(booking, items, total_money, approver=None, summary=None)
     y += 106
 
     draw_rounded(draw, (PADDING, y, WIDTH - PADDING, y + 96), 16, "#ecfdf3", "#bbf7d0")
-    draw.text((PADDING + 24, y + 23), "TỔNG CỘNG", fill=GREEN, font=FONT_LABEL)
-    total_label = money(total_money)
-    draw.text((WIDTH - PADDING - 24 - text_width(draw, total_label, FONT_TOTAL), y + 38), total_label, fill=GREEN, font=FONT_TOTAL)
+    payment_fields = [
+        ("TỔNG TIỀN", money(total_money)),
+        ("ĐÃ CỌC", money(summary["tien_da_coc"])),
+        ("CÒN PHẢI THANH TOÁN", money(summary["con_lai"])),
+    ]
+    payment_width = (WIDTH - PADDING * 2 - 48) // 3
+    for index, (label, value) in enumerate(payment_fields):
+        x = PADDING + 18 + index * (payment_width + 24)
+        draw.text((x, y + 20), label, fill=GREEN, font=FONT_LABEL)
+        draw.text((x, y + 50), value, fill=GREEN, font=FONT_TEXT_BOLD)
 
     y += 126
     footer = "Vui lòng giữ hóa đơn này để đối chiếu khi cần hỗ trợ."

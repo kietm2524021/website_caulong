@@ -246,14 +246,14 @@ class DatSan(models.Model):
         verbose_name="Người duyệt",
     )
 
-    def tao_noi_dung_chuyen_khoan(self):
+    def tao_noi_dung_chuyen_khoan(self, tien_coc=None):
         if not (self.ngayBatDau and self.san_id):
             return ""
 
         ten_khach = self.tenNguoiDat or (self.nguoi_dat.ten if self.nguoi_dat else "KHACH")
         ten_san = self.san.tenSan
         ngay_format = self.ngayBatDau.strftime("%d%m%y")
-        tien_coc = int(self.so_tien_coc or 0)
+        tien_coc = int(self.so_tien_coc if tien_coc is None else tien_coc)
 
         def normalize_part(value):
             normalized = unicodedata.normalize(

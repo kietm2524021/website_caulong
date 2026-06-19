@@ -77,9 +77,9 @@
                     <div class="info-row"><span class="info-label">Chủ tài khoản</span><span class="info-value">{{ booking.san.maChiNhanh.chu_tai_khoan|default:"Chưa cập nhật" }}</span></div>
                     <div class="info-row"><span class="info-label">Loại đặt sân</span><span class="info-value">{{ booking.get_loaiDatSan_display }}{% if is_group %} · {{ so_buoi }} buổi{% endif %}</span></div>
                     <div class="info-row"><span class="info-label">Khung giờ</span><span class="info-value">{{ booking.gioBatDau|date:"H:i" }} - {{ booking.gioKetThuc|date:"H:i" }}</span></div>
-                    <button class="transfer-content" id="copyTransferContent" type="button" data-copy="{{ booking.noi_dung_chuyen_khoan }}">
+                    <button class="transfer-content" id="copyTransferContent" type="button" data-copy="{{ noi_dung_chuyen_khoan }}">
                         <span class="info-label">Nội dung chuyển khoản · Nhấp để sao chép <i class="fa-regular fa-copy ms-1"></i></span>
-                        <code>{{ booking.noi_dung_chuyen_khoan }}</code>
+                        <code>{{ noi_dung_chuyen_khoan }}</code>
                         <span class="small text-success fw-bold d-none" id="copyFeedback"><i class="fa-solid fa-check me-1"></i>Đã sao chép vào bộ nhớ tạm</span>
                     </button>
                     <p class="deposit-note">Vui lòng chuyển đúng số tiền và nội dung để quản lý đối soát nhanh. Sau khi hoàn tất, chọn “Đã chuyển khoản”.</p>

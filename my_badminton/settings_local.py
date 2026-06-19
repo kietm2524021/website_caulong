@@ -48,7 +48,7 @@ INSTALLED_APPS = [
     "django.contrib.humanize",
     "cloudinary_storage",
     "cloudinary",
-    "members",
+    "core.apps.CoreConfig",
 ]
 
 MIDDLEWARE = [
@@ -56,11 +56,11 @@ MIDDLEWARE = [
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-    "members.security.RequestRateLimitMiddleware",
+    "core.security.RequestRateLimitMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
-    "members.security.SessionIdleTimeoutMiddleware",
+    "core.security.SessionIdleTimeoutMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -77,9 +77,9 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
-                "members.context_processors.site_config",
+                "core.context_processors.site_config",
             ],
-            "builtins": ["members.templatetags.vietnamese_numbers"],
+            "builtins": ["core.templatetags.vietnamese_numbers"],
         },
     },
 ]
@@ -127,7 +127,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 10}},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
-    {"NAME": "members.security.PasswordComplexityValidator"},
+    {"NAME": "core.security.PasswordComplexityValidator"},
 ]
 
 PASSWORD_HASHERS = []
