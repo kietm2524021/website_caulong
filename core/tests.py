@@ -1,10 +1,12 @@
 import os
 import uuid
+from io import StringIO
 from decimal import Decimal
 from datetime import time, timedelta
 from unittest.mock import Mock, patch
 
 from django.test import TestCase
+from django.core.management import call_command
 from django.db.models import Sum
 from django.urls import reverse
 from django.utils import timezone
@@ -65,6 +67,40 @@ class BookingSupportInvoiceTests(TestCase):
         }
         data.update(extra)
         return self.client.post(f"{reverse('dat_san')}?san_id={court.id}", data)
+
+    @patch.dict(
+        os.environ,
+        {
+            "CREATE_SUPERUSER": "True",
+            "DEFAULT_ADMIN_NAME": "Admin Mặc Định",
+            "DEFAULT_ADMIN_PHONE": "0988888888",
+            "DJANGO_SUPERUSER_PASSWORD": "StrongSeedPass@123",
+            "DJANGO_SUPERUSER_EMAIL": "seed-admin@example.com",
+        },
+        clear=False,
+    )
+    def test_seed_defaults_is_idempotent(self):
+        call_command("seed_defaults", stdout=StringIO())
+
+        seeded_admin = NguoiDung.objects.get(sodienthoai="0988888888")
+        self.assertTrue(seeded_admin.is_superuser)
+        self.assertTrue(seeded_admin.is_staff)
+        self.assertEqual(seeded_admin.ten, "Admin Mặc Định")
+
+        seeded_branches = ChiNhanh.objects.filter(tenChiNhanh__in=["Lê Giang 1", "Lê Giang 2"])
+        self.assertEqual(seeded_branches.count(), 2)
+        self.assertEqual(SanCauLong.objects.filter(maChiNhanh__in=seeded_branches).count(), 14)
+        court = SanCauLong.objects.get(maChiNhanh__tenChiNhanh="Lê Giang 1", tenSan="Sân 1")
+        court.gia_co_dinh = Decimal("123000")
+        court.save(update_fields=["gia_co_dinh"])
+
+        call_command("seed_defaults", stdout=StringIO())
+
+        self.assertEqual(NguoiDung.objects.filter(sodienthoai="0988888888").count(), 1)
+        self.assertEqual(ChiNhanh.objects.filter(tenChiNhanh__in=["Lê Giang 1", "Lê Giang 2"]).count(), 2)
+        self.assertEqual(SanCauLong.objects.filter(maChiNhanh__in=seeded_branches).count(), 14)
+        court.refresh_from_db()
+        self.assertEqual(court.gia_co_dinh, Decimal("123000"))
 
     def test_booking_conflict_is_scoped_to_the_same_court(self):
         booking_date = timezone.now().date() + timedelta(days=2)
@@ -376,7 +412,7 @@ class BookingSupportInvoiceTests(TestCase):
         mock_response.json.return_value = {"output_text": "Day la phan hoi AI"}
         mock_post.return_value = mock_response
 
-        reply, source, needs_admin = tao_phan_hoi_ho_tro("Huong dan dat san giup toi")
+        reply, source, needs_admin = tao_phan_hoi_ho_tro("Chi nhanh co dich vu gi dac biet?")
 
         self.assertEqual(reply, "Day la phan hoi AI")
         self.assertEqual(source, "ai")

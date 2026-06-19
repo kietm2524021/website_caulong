@@ -12,7 +12,5 @@ python manage.py collectstatic --noinput
 # Cập nhật Database
 python manage.py migrate
 
-# Chạy script tạo admin
-if [ "$CREATE_SUPERUSER" = "True" ]; then
-  python create_admin.py
-fi
+# Tạo dữ liệu mặc định an toàn, không nhân đôi khi deploy lại
+python manage.py seed_defaults
