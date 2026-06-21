@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import time
+from ipaddress import ip_address
 from datetime import timedelta
 
 from django.conf import settings
@@ -18,10 +19,20 @@ logger = logging.getLogger("security")
 
 
 def get_client_ip(request):
-    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()[:45]
-    return (request.META.get("REMOTE_ADDR") or "unknown")[:45]
+    candidates = []
+    if getattr(settings, "TRUST_PROXY_HEADERS", False):
+        candidates.append(request.META.get("HTTP_CF_CONNECTING_IP", ""))
+        forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        if forwarded_for:
+            candidates.append(forwarded_for.split(",")[0].strip())
+    candidates.append(request.META.get("REMOTE_ADDR", ""))
+
+    for candidate in candidates:
+        try:
+            return str(ip_address((candidate or "").strip()))
+        except ValueError:
+            continue
+    return "unknown"
 
 
 def normalize_plain_text(value, max_length=1000, field_label="Nội dung"):
@@ -140,6 +151,83 @@ class SessionIdleTimeoutMiddleware:
         return self.get_response(request)
 
 
+class SecurityResponseHeadersMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        response.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+        response.setdefault("X-Permitted-Cross-Domain-Policies", "none")
+        response.setdefault("Cross-Origin-Resource-Policy", "same-site")
+        csp_report_only = getattr(settings, "CONTENT_SECURITY_POLICY_REPORT_ONLY", "")
+        if csp_report_only:
+            response.setdefault("Content-Security-Policy-Report-Only", csp_report_only)
+        return response
+
+
+class BotProtectionMiddleware:
+    DEFAULT_BLOCKED_USER_AGENTS = (
+        "sqlmap",
+        "nikto",
+        "masscan",
+        "nmap scripting engine",
+        "acunetix",
+        "nessus",
+        "wpscan",
+        "dirbuster",
+        "gobuster",
+        "zgrab",
+    )
+    DEFAULT_BLOCKED_PATHS = (
+        r"(^|/)\.env(?:\.|/|$)",
+        r"(^|/)\.git(?:/|$)",
+        r"(^|/)wp-(?:admin|login|content)(?:/|\.php|$)",
+        r"(^|/)(?:phpmyadmin|pma|adminer)(?:/|\.php|$)",
+        r"(^|/)vendor/phpunit(?:/|$)",
+        r"(^|/)(?:server-status|server-info)(?:/|$)",
+        r"(^|/)(?:shell|cmd|webshell)\.php$",
+    )
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+        self.enabled = getattr(settings, "BOT_PROTECTION_ENABLED", True)
+        blocked_agents = getattr(settings, "BOT_BLOCKED_USER_AGENTS", self.DEFAULT_BLOCKED_USER_AGENTS)
+        blocked_paths = getattr(settings, "BOT_BLOCKED_PATHS", self.DEFAULT_BLOCKED_PATHS)
+        self.blocked_agents = tuple(item.lower() for item in blocked_agents)
+        self.blocked_paths = tuple(re.compile(pattern, re.IGNORECASE) for pattern in blocked_paths)
+
+    def __call__(self, request):
+        if not self.enabled:
+            return self.get_response(request)
+
+        method = request.method.upper()
+        path = request.path or "/"
+        user_agent = (request.META.get("HTTP_USER_AGENT") or "").lower()[:512]
+        blocked_reason = None
+
+        if method in {"TRACE", "CONNECT"}:
+            blocked_reason = f"method:{method}"
+        elif any(marker in user_agent for marker in self.blocked_agents):
+            blocked_reason = "user-agent"
+        elif any(pattern.search(path) for pattern in self.blocked_paths):
+            blocked_reason = "sensitive-path"
+
+        if blocked_reason:
+            logger.warning(
+                "Bot request blocked reason=%s ip=%s method=%s path=%s",
+                blocked_reason,
+                get_client_ip(request),
+                method,
+                path[:300],
+            )
+            response = HttpResponse("Not found", status=404)
+            response["Cache-Control"] = "no-store"
+            return response
+
+        return self.get_response(request)
+
+
 class RequestRateLimitMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
@@ -168,8 +256,12 @@ class RequestRateLimitMiddleware:
                     path,
                 )
                 if path.startswith("/api/") or path.startswith("/quan-tri/api/"):
-                    return JsonResponse({"error": "Bạn thao tác quá nhanh. Vui lòng thử lại sau."}, status=429)
-                return HttpResponse("Too many requests", status=429)
+                    response = JsonResponse({"error": "Bạn thao tác quá nhanh. Vui lòng thử lại sau."}, status=429)
+                else:
+                    response = HttpResponse("Too many requests", status=429)
+                response["Retry-After"] = str(window)
+                response["Cache-Control"] = "no-store"
+                return response
             if current == 0:
                 cache.set(key, 1, timeout=window)
             else:

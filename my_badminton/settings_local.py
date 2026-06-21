@@ -27,6 +27,7 @@ if NGROK_DOMAIN:
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
+TRUST_PROXY_HEADERS = os.getenv("TRUST_PROXY_HEADERS", "False").lower() in {"1", "true", "yes"}
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
@@ -53,9 +54,11 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "core.security.SecurityResponseHeadersMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "core.security.BotProtectionMiddleware",
     "core.security.RequestRateLimitMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -161,8 +164,13 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 15 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 300
 
+BOT_PROTECTION_ENABLED = os.getenv("BOT_PROTECTION_ENABLED", "True").lower() in {"1", "true", "yes"}
+CONTENT_SECURITY_POLICY_REPORT_ONLY = os.getenv("CONTENT_SECURITY_POLICY_REPORT_ONLY", "")
+
 RATE_LIMIT_RULES = [
-    {"name": "login", "path_prefix": "/login/", "methods": {"POST"}, "limit": 12, "window": 300},
+    {"name": "global", "path_prefix": "/", "methods": {"GET", "POST", "PUT", "PATCH", "DELETE"}, "limit": 300, "window": 60},
+    {"name": "write", "path_prefix": "/", "methods": {"POST", "PUT", "PATCH", "DELETE"}, "limit": 80, "window": 60},
+    {"name": "login", "path_prefix": "/login/", "methods": {"POST"}, "limit": 8, "window": 300},
     {"name": "support_api", "path_prefix": "/api/ho-tro/", "methods": {"GET", "POST"}, "limit": 60, "window": 60},
     {"name": "admin_support_api", "path_prefix": "/quan-tri/api/ho-tro/", "methods": {"GET", "POST"}, "limit": 120, "window": 60},
     {"name": "recruitment_api", "path_prefix": "/api/update-recruitment/", "methods": {"POST"}, "limit": 20, "window": 60},

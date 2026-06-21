@@ -317,7 +317,7 @@ def admin_dashboard(request):
         "customers": customer_qs.count(),
     }
 
-    today_schedule = bookings.filter(ngayBatDau=today).order_by("gioBatDau")[:12]
+    today_schedule = bookings.filter(ngayBatDau=today).order_by("-gioBatDau", "-id")[:12]
     recent_bookings = grouped_booking_rows(bookings.order_by("-ngay_tao", "-ngayBatDau", "-gioBatDau"))[:10]
     support_threads = conversations.annotate(last_message=Max("hotro_set__ngay_gui")).order_by("-last_message")[:8]
 

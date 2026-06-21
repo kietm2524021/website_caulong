@@ -207,6 +207,8 @@ def forum_intent(message):
 
 def stats_intent(message):
     normalized = normalize_text(message)
+    if court_number_from_message(message) or "san nay" in normalized or "lich nay" in normalized:
+        return False
     return any(pattern in normalized for pattern in {
         "bao nhieu san",
         "bao nhieu lich",

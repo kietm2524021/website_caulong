@@ -620,8 +620,8 @@ def lich_cong_dong(request):
             return redirect('lich_cong_dong')
     else:
         ngay_xem = timezone.now().date()
-    ds_san = SanCauLong.objects.select_related('maChiNhanh').order_by('maChiNhanh__tenChiNhanh', 'tenSan')
-    ds_dat_cho = DatSan.objects.filter(ngayBatDau=ngay_xem, trangThai__in=['confirmed', 'pending', 'completed']).select_related('san', 'san__maChiNhanh', 'nguoi_dat').order_by('san__maChiNhanh__tenChiNhanh', 'san__tenSan', 'gioBatDau')
+    ds_san = SanCauLong.objects.select_related('maChiNhanh').order_by('-maChiNhanh__tenChiNhanh', '-tenSan')
+    ds_dat_cho = DatSan.objects.filter(ngayBatDau=ngay_xem, trangThai__in=['confirmed', 'pending', 'completed']).select_related('san', 'san__maChiNhanh', 'nguoi_dat').order_by('-gioBatDau', '-san__tenSan', '-id')
     san_id = request.GET.get('san'); 
     if san_id:
         if not san_id.isdigit():

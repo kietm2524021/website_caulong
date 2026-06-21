@@ -5,7 +5,9 @@ from decimal import Decimal
 from datetime import time, timedelta
 from unittest.mock import Mock, patch
 
-from django.test import TestCase
+from django.core.cache import cache
+from django.http import HttpResponse
+from django.test import RequestFactory, TestCase, override_settings
 from django.core.management import call_command
 from django.db.models import Sum
 from django.urls import reverse
@@ -14,6 +16,7 @@ from django.utils import timezone
 from .models import BaiDang, ChiNhanh, DatSan, HoiThoaiKhachHang, HoTro, NguoiDung, SanCauLong, ThongBao
 from . import invoice_image
 from .support_ai import tao_phan_hoi_ho_tro
+from .security import BotProtectionMiddleware, RequestRateLimitMiddleware, SecurityResponseHeadersMiddleware
 from .views import tinh_tien_chi_tiet
 
 
@@ -1167,3 +1170,74 @@ class BookingSupportInvoiceTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertFalse(HoiThoaiKhachHang.objects.filter(id=conversation.id).exists())
+
+
+class SecurityAndScheduleTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = NguoiDung.objects.create_user(
+            username="0911111111",
+            sodienthoai="0911111111",
+            ten="Khách kiểm thử",
+            password="Test@12345",
+        )
+        self.branch = ChiNhanh.objects.create(
+            tenChiNhanh="Chi nhánh kiểm thử",
+            diaChi="Bạc Liêu",
+            sdt="0911111112",
+            tenQuanLy="Quản lý kiểm thử",
+        )
+        self.court = SanCauLong.objects.create(maChiNhanh=self.branch, tenSan="Sân 1")
+
+    def test_system_schedule_is_sorted_descending(self):
+        today = timezone.localdate()
+        for start, end in [(time(8, 0), time(9, 0)), (time(18, 0), time(19, 0)), (time(20, 0), time(21, 0))]:
+            DatSan.objects.create(
+                nguoi_dat=self.user,
+                san=self.court,
+                ngayBatDau=today,
+                gioBatDau=start,
+                gioKetThuc=end,
+                tongGiaTien=80000,
+                trangThai="confirmed",
+            )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("lich_cong_dong"))
+
+        self.assertEqual(response.status_code, 200)
+        start_times = [item.gioBatDau for item in response.context["ds_dat_cho"]]
+        self.assertEqual(start_times, [time(20, 0), time(18, 0), time(8, 0)])
+
+    @override_settings(BOT_PROTECTION_ENABLED=True)
+    def test_bot_scanners_and_sensitive_paths_are_blocked(self):
+        middleware = BotProtectionMiddleware(lambda request: HttpResponse("ok"))
+
+        sensitive_path = middleware(self.factory.get("/.env", HTTP_USER_AGENT="Mozilla/5.0"))
+        scanner_agent = middleware(self.factory.get("/", HTTP_USER_AGENT="sqlmap/1.8"))
+
+        self.assertEqual(sensitive_path.status_code, 404)
+        self.assertEqual(scanner_agent.status_code, 404)
+        self.assertEqual(sensitive_path["Cache-Control"], "no-store")
+
+    @override_settings(
+        RATE_LIMIT_RULES=[
+            {"name": "test", "path_prefix": "/api/test/", "methods": {"GET"}, "limit": 1, "window": 60},
+        ]
+    )
+    def test_rate_limit_returns_retry_after(self):
+        cache.clear()
+        middleware = RequestRateLimitMiddleware(lambda request: HttpResponse("ok"))
+        first = middleware(self.factory.get("/api/test/", REMOTE_ADDR="198.51.100.10"))
+        second = middleware(self.factory.get("/api/test/", REMOTE_ADDR="198.51.100.10"))
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 429)
+        self.assertEqual(second["Retry-After"], "60")
+
+    def test_security_response_headers_are_added(self):
+        middleware = SecurityResponseHeadersMiddleware(lambda request: HttpResponse("ok"))
+        response = middleware(self.factory.get("/"))
+
+        self.assertEqual(response["X-Permitted-Cross-Domain-Policies"], "none")
+        self.assertIn("camera=()", response["Permissions-Policy"])
