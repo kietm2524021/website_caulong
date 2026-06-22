@@ -13,7 +13,7 @@ from django.db.models import Sum
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BaiDang, ChiNhanh, DatSan, HoiThoaiKhachHang, HoTro, NguoiDung, SanCauLong, ThongBao
+from .models import BaiDang, BinhLuan, ChiNhanh, DatSan, HoiThoaiKhachHang, HoTro, NguoiDung, SanCauLong, ThongBao
 from . import invoice_image
 from .support_ai import tao_phan_hoi_ho_tro
 from .security import BotProtectionMiddleware, RequestRateLimitMiddleware, SecurityResponseHeadersMiddleware
@@ -135,6 +135,8 @@ class BookingSupportInvoiceTests(TestCase):
 
     def test_booking_generates_deposit_transfer_content(self):
         booking_date = timezone.now().date() + timedelta(days=3)
+        self.branch.tenChiNhanh = "Lê Giang 1"
+        self.branch.save(update_fields=["tenChiNhanh"])
         self.post_booking(
             self.court_2,
             booking_date,
@@ -146,7 +148,7 @@ class BookingSupportInvoiceTests(TestCase):
         self.assertEqual(booking.phuong_thuc_thanh_toan, "bank")
         self.assertEqual(
             booking.noi_dung_chuyen_khoan,
-            f"DATCOC-KHACHTEST-SAN2-{booking_date.strftime('%d%m%y')}-10000",
+            f"KHACHTEST_LG1_SAN2_1900_{booking_date.strftime('%d%m%y')}",
         )
         self.assertTrue(booking.noi_dung_chuyen_khoan.isascii())
 
@@ -225,6 +227,79 @@ class BookingSupportInvoiceTests(TestCase):
         invoice = self.client.get(reverse("xuat_hoa_don", args=[first_booking.id]))
         self.assertContains(invoice, "40.000đ")
         self.assertContains(invoice, "600.000đ")
+
+    def test_admin_bookings_flags_overlapping_requests_on_the_same_court(self):
+        booking_date = timezone.localdate() + timedelta(days=2)
+        first = DatSan.objects.create(
+            nguoi_dat=self.user,
+            san=self.court_1,
+            ngayBatDau=booking_date,
+            gioBatDau=time(18, 0),
+            gioKetThuc=time(20, 0),
+            tongGiaTien=160000,
+            trangThai="pending",
+        )
+        second = DatSan.objects.create(
+            nguoi_dat=self.user,
+            san=self.court_1,
+            ngayBatDau=booking_date,
+            gioBatDau=time(19, 0),
+            gioKetThuc=time(21, 0),
+            tongGiaTien=160000,
+            trangThai="confirmed",
+        )
+
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("admin_bookings"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["booking_summary"]["conflicts"], 2)
+        rows = {row.id: row for row in response.context["bookings"]}
+        self.assertTrue(rows[first.id].admin_has_conflict)
+        self.assertTrue(rows[second.id].admin_has_conflict)
+        self.assertContains(response, "Chồng lịch với 1 đơn khác")
+
+    def test_admin_bookings_prioritizes_deposit_confirmation_then_new_requests(self):
+        booking_date = timezone.localdate() + timedelta(days=3)
+        waiting = DatSan.objects.create(
+            nguoi_dat=self.user,
+            san=self.court_1,
+            ngayBatDau=booking_date,
+            gioBatDau=time(20, 0),
+            gioKetThuc=time(21, 0),
+            tongGiaTien=80000,
+            trangThai="pending",
+            yeu_cau_thanh_toan=True,
+        )
+        new_request = DatSan.objects.create(
+            nguoi_dat=self.user,
+            san=self.court_2,
+            ngayBatDau=booking_date,
+            gioBatDau=time(18, 0),
+            gioKetThuc=time(19, 0),
+            tongGiaTien=80000,
+            trangThai="pending",
+        )
+        deposited = DatSan.objects.create(
+            nguoi_dat=self.user,
+            san=self.court_2,
+            ngayBatDau=booking_date,
+            gioBatDau=time(21, 0),
+            gioKetThuc=time(22, 0),
+            tongGiaTien=80000,
+            trangThai="pending",
+            yeu_cau_thanh_toan=True,
+            khach_xac_nhan_chuyen_khoan=True,
+        )
+
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("admin_bookings"))
+
+        self.assertEqual(response.status_code, 200)
+        row_ids = [row.id for row in response.context["bookings"]]
+        self.assertEqual(row_ids, [deposited.id, new_request.id, waiting.id])
+        self.assertContains(response, "Cần đối soát cọc ngay")
+        self.assertContains(response, "Yêu cầu mới cần xử lý")
 
     @patch.dict(os.environ, {"AI_SUPPORT_ENABLED": "False"}, clear=False)
     def test_support_auto_reply_and_admin_handoff(self):
@@ -558,6 +633,131 @@ class BookingSupportInvoiceTests(TestCase):
         self.assertTrue(ThongBao.objects.filter(nguoi_nhan=self.admin, loai="post").exists())
         self.assertFalse(ThongBao.objects.filter(nguoi_nhan=branch_manager, loai="post").exists())
 
+    def test_forum_lists_only_approved_posts_and_preserves_search_query(self):
+        approved = BaiDang.objects.create(
+            nguoi_dang=self.user,
+            tieu_de="Kỹ thuật đập cầu",
+            noi_dung="Nội dung đã được duyệt.",
+            duyet_bai=True,
+        )
+        pending = BaiDang.objects.create(
+            nguoi_dang=self.user,
+            tieu_de="Kỹ thuật chưa duyệt",
+            noi_dung="Nội dung đang chờ.",
+            duyet_bai=False,
+        )
+
+        response = self.client.get(reverse("dien_dan"), {"q": "Kỹ thuật"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["query"], "Kỹ thuật")
+        self.assertContains(response, approved.tieu_de)
+        self.assertNotContains(response, pending.tieu_de)
+
+    def test_post_view_count_increases_once_per_session(self):
+        post = BaiDang.objects.create(
+            nguoi_dang=self.user,
+            tieu_de="Bài kiểm tra lượt xem",
+            noi_dung="Nội dung bài viết.",
+            duyet_bai=True,
+        )
+
+        self.client.get(reverse("chi_tiet_bai_viet", args=[post.id]))
+        self.client.get(reverse("chi_tiet_bai_viet", args=[post.id]))
+        post.refresh_from_db()
+
+        self.assertEqual(post.luot_xem, 1)
+
+    def test_comment_validation_and_xss_escaping(self):
+        post = BaiDang.objects.create(
+            nguoi_dang=self.user,
+            tieu_de="Bài kiểm tra bình luận",
+            noi_dung="Nội dung bài viết.",
+            duyet_bai=True,
+        )
+        detail_url = reverse("chi_tiet_bai_viet", args=[post.id])
+
+        invalid = self.client.post(detail_url, {"noi_dung": "   "})
+        self.assertEqual(invalid.status_code, 200)
+        self.assertTrue(invalid.context["form"].errors)
+        self.assertEqual(BinhLuan.objects.count(), 0)
+
+        self.client.post(detail_url, {"noi_dung": "<script>alert(1)</script>"})
+        rendered = self.client.get(detail_url)
+        self.assertContains(rendered, "&lt;script&gt;alert(1)&lt;/script&gt;")
+        self.assertNotContains(rendered, "<script>alert(1)</script>")
+
+    def test_only_comment_owner_or_staff_can_delete_comment(self):
+        other_user = NguoiDung.objects.create_user(
+            username="0900000088",
+            sodienthoai="0900000088",
+            ten="Người bình luận",
+            password="Other@12345",
+        )
+        post = BaiDang.objects.create(
+            nguoi_dang=self.user,
+            tieu_de="Bài kiểm tra quyền xóa",
+            noi_dung="Nội dung bài viết.",
+            duyet_bai=True,
+        )
+        comment = BinhLuan.objects.create(bai_dang=post, nguoi_binh_luan=other_user, noi_dung="Bình luận")
+
+        self.client.post(reverse("xoa_binh_luan", args=[comment.id]))
+        self.assertTrue(BinhLuan.objects.filter(id=comment.id).exists())
+
+        self.client.force_login(self.admin)
+        self.client.post(reverse("xoa_binh_luan", args=[comment.id]))
+        self.assertFalse(BinhLuan.objects.filter(id=comment.id).exists())
+
+    def test_admin_can_approve_hide_and_delete_post_without_external_redirect(self):
+        post = BaiDang.objects.create(
+            nguoi_dang=self.user,
+            tieu_de="Bài chờ duyệt",
+            noi_dung="Nội dung bài viết.",
+        )
+        self.client.force_login(self.admin)
+
+        response = self.client.post(
+            reverse("admin_post_action", args=[post.id]),
+            {"action": "approve", "next": "https://evil.example/phishing"},
+        )
+
+        self.assertRedirects(response, reverse("admin_posts"))
+        post.refresh_from_db()
+        self.assertTrue(post.duyet_bai)
+
+        self.client.post(reverse("admin_post_action", args=[post.id]), {"action": "hide"})
+        post.refresh_from_db()
+        self.assertFalse(post.duyet_bai)
+
+        self.client.post(reverse("admin_post_action", args=[post.id]), {"action": "delete"})
+        self.assertFalse(BaiDang.objects.filter(id=post.id).exists())
+
+    def test_opening_support_widget_does_not_create_empty_conversation(self):
+        HoiThoaiKhachHang.objects.filter(nguoi_dung=self.user).delete()
+
+        response = self.client.get(reverse("support_widget_state"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["conversation"])
+        self.assertEqual(response.json()["messages"], [])
+        self.assertFalse(HoiThoaiKhachHang.objects.filter(nguoi_dung=self.user).exists())
+
+    def test_closed_support_conversation_is_hidden_from_admin_queue(self):
+        conversation = HoiThoaiKhachHang.objects.create(
+            nguoi_dung=self.user,
+            chi_nhanh=self.branch,
+            can_admin=True,
+            da_dong=True,
+        )
+        HoTro.objects.create(hoi_thoai=conversation, nguoi_dung=self.user, cau_hoi="Hội thoại đã đóng")
+        self.client.force_login(self.admin)
+
+        response = self.client.get(reverse("admin_support_widget_state"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["conversations"], [])
+
     def test_support_request_notifies_branch_manager_and_links_to_chat(self):
         branch_manager = NguoiDung.objects.create_user(
             username="manager-support",
@@ -659,7 +859,7 @@ class BookingSupportInvoiceTests(TestCase):
         self.assertContains(detail, f"<code>{booking.noi_dung_chuyen_khoan}</code>", html=True)
         self.assertRegex(
             booking.noi_dung_chuyen_khoan,
-            r"^DATCOC-[A-Z0-9]+-[A-Z0-9]+-\d{6}-\d+$",
+            r"^[A-Z0-9]+_[A-Z0-9]+_[A-Z0-9]+_\d{4}_\d{6}$",
         )
         self.assertContains(detail, "Đã chuyển khoản")
         self.assertContains(detail, "Hủy đặt sân")
@@ -747,9 +947,10 @@ class BookingSupportInvoiceTests(TestCase):
             Decimal("300000"),
         )
         first_booking = DatSan.objects.filter(nhom_dat_san=group_id).order_by("ngayBatDau").first()
+        last_booking = DatSan.objects.filter(nhom_dat_san=group_id).order_by("ngayBatDau").last()
         self.client.force_login(self.admin)
         self.client.post(
-            reverse("admin_booking_action", args=[first_booking.id]),
+            reverse("admin_booking_action", args=[last_booking.id]),
             {"action": "request_payment"},
         )
         expected_content = first_booking.tao_noi_dung_chuyen_khoan(tien_coc=Decimal("300000"))
@@ -1180,6 +1381,7 @@ class SecurityAndScheduleTests(TestCase):
             sodienthoai="0911111111",
             ten="Khách kiểm thử",
             password="Test@12345",
+            is_staff=True,
         )
         self.branch = ChiNhanh.objects.create(
             tenChiNhanh="Chi nhánh kiểm thử",
@@ -1189,12 +1391,21 @@ class SecurityAndScheduleTests(TestCase):
         )
         self.court = SanCauLong.objects.create(maChiNhanh=self.branch, tenSan="Sân 1")
 
-    def test_system_schedule_is_sorted_descending(self):
+    def test_system_and_admin_schedules_are_grouped_by_time_then_court(self):
         today = timezone.localdate()
-        for start, end in [(time(8, 0), time(9, 0)), (time(18, 0), time(19, 0)), (time(20, 0), time(21, 0))]:
+        court_2 = SanCauLong.objects.create(maChiNhanh=self.branch, tenSan="Sân 2")
+        court_5 = SanCauLong.objects.create(maChiNhanh=self.branch, tenSan="Sân 5")
+        court_6 = SanCauLong.objects.create(maChiNhanh=self.branch, tenSan="Sân 6")
+        schedule = [
+            (self.court, time(15, 0), time(16, 0)),
+            (court_2, time(15, 0), time(16, 0)),
+            (court_5, time(17, 0), time(18, 0)),
+            (court_6, time(17, 0), time(18, 0)),
+        ]
+        for court, start, end in reversed(schedule):
             DatSan.objects.create(
                 nguoi_dat=self.user,
-                san=self.court,
+                san=court,
                 ngayBatDau=today,
                 gioBatDau=start,
                 gioKetThuc=end,
@@ -1206,8 +1417,19 @@ class SecurityAndScheduleTests(TestCase):
         response = self.client.get(reverse("lich_cong_dong"))
 
         self.assertEqual(response.status_code, 200)
-        start_times = [item.gioBatDau for item in response.context["ds_dat_cho"]]
-        self.assertEqual(start_times, [time(20, 0), time(18, 0), time(8, 0)])
+        expected = [(start, court.tenSan) for court, start, _ in schedule]
+        system_schedule = [(item.gioBatDau, item.san.tenSan) for item in response.context["ds_dat_cho"]]
+        self.assertEqual(system_schedule, expected)
+
+        admin_response = self.client.get(reverse("admin_dashboard"))
+        self.assertEqual(admin_response.status_code, 200)
+        admin_schedule = [(item.gioBatDau, item.san.tenSan) for item in admin_response.context["today_schedule"]]
+        self.assertEqual(admin_schedule, expected)
+
+    def test_source_guard_is_loaded_for_customer_and_admin_pages(self):
+        self.client.force_login(self.user)
+        self.assertContains(self.client.get(reverse("home")), "js/source-guard.js")
+        self.assertContains(self.client.get(reverse("admin_dashboard")), "js/source-guard.js")
 
     @override_settings(BOT_PROTECTION_ENABLED=True)
     def test_bot_scanners_and_sensitive_paths_are_blocked(self):

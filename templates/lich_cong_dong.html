@@ -109,16 +109,16 @@
             <div class="branch-section animate__animated animate__fadeInUp">
                 <div class="branch-title"><i class="fa-solid fa-building"></i> {{ branch.grouper }}</div>
 
-                {% regroup branch.list by san as court_list %}
+                {% regroup branch.list by gioBatDau as time_list %}
                 
-                {% for court in court_list %}
+                {% for time_group in time_list %}
                 <div class="court-section">
                     <div class="court-title">
-                        <div class="court-icon"><i class="fa-solid fa-table-tennis"></i></div>
-                        {{ court.grouper.tenSan }}
+                        <div class="court-icon"><i class="fa-solid fa-clock"></i></div>
+                        {{ time_group.grouper|time:"H:i" }}
                     </div>
 
-                    {% for slot in court.list %}
+                    {% for slot in time_group.list %}
                     <div class="match-card timeline-item" 
                         data-date="{{ slot.ngayBatDau|date:'Y-m-d' }}" 
                          data-start="{{ slot.gioBatDau|time:'H:i' }}" 
@@ -141,6 +141,7 @@
 
                         <div>
                             <div class="user-info">
+                                <strong class="text-primary me-2"><i class="fa-solid fa-table-tennis me-1"></i>{{ slot.san.tenSan }}</strong>
                                 <i class="fa-solid fa-user-circle text-muted me-1"></i>
                                 {% if slot.nguoi_dat == request.user %}
                                     <span class="text-success fw-bold">Bạn ({{ slot.tenNguoiDat }})</span>

@@ -1,4 +1,4 @@
-{% load humanize %}
+{% load humanize static %}
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -380,6 +380,7 @@
             }, 15000);
         });
     </script>
+    <script src="/static/js/source-guard.js" defer></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

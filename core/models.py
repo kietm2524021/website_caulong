@@ -247,13 +247,26 @@ class DatSan(models.Model):
     )
 
     def tao_noi_dung_chuyen_khoan(self, tien_coc=None):
-        if not (self.ngayBatDau and self.san_id):
+        if not (self.ngayBatDau and self.gioBatDau and self.san_id):
             return ""
 
-        ten_khach = self.tenNguoiDat or (self.nguoi_dat.ten if self.nguoi_dat else "KHACH")
-        ten_san = self.san.tenSan
-        ngay_format = self.ngayBatDau.strftime("%d%m%y")
-        tien_coc = int(self.so_tien_coc if tien_coc is None else tien_coc)
+        source = self
+        if self.pk and self.loaiDatSan == 1 and self.nhom_dat_san:
+            source = (
+                type(self).objects.filter(nhom_dat_san=self.nhom_dat_san)
+                .select_related("san__maChiNhanh", "nguoi_dat")
+                .order_by("ngayBatDau", "gioBatDau", "id")
+                .first()
+                or self
+            )
+
+        ten_khach = source.tenNguoiDat or (
+            source.nguoi_dat.ten if source.nguoi_dat else "KHACH"
+        )
+        ten_san = source.san.tenSan
+        ten_chi_nhanh = source.san.maChiNhanh.tenChiNhanh
+        ngay_format = source.ngayBatDau.strftime("%d%m%y")
+        gio_format = source.gioBatDau.strftime("%H%M")
 
         def normalize_part(value):
             normalized = unicodedata.normalize(
@@ -264,8 +277,25 @@ class DatSan(models.Model):
             )
             return re.sub(r"[^A-Za-z0-9]+", "", without_accents).upper()
 
-        parts = ("DATCOC", ten_khach, ten_san, ngay_format, tien_coc)
-        return "-".join(normalize_part(part) for part in parts)
+        def abbreviate_branch(value):
+            normalized = unicodedata.normalize(
+                "NFD", str(value).replace("đ", "d").replace("Đ", "D")
+            )
+            without_accents = "".join(
+                char for char in normalized if unicodedata.category(char) != "Mn"
+            )
+            tokens = re.findall(r"[A-Za-z]+|\d+", without_accents.upper())
+            abbreviation = "".join(token if token.isdigit() else token[0] for token in tokens)
+            return abbreviation or "CN"
+
+        parts = (
+            normalize_part(ten_khach),
+            abbreviate_branch(ten_chi_nhanh),
+            normalize_part(ten_san),
+            gio_format,
+            ngay_format,
+        )
+        return "_".join(parts)
 
     def tinh_tien_coc_mac_dinh(self):
         if self.loaiDatSan == 1:

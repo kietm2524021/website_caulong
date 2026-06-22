@@ -75,7 +75,7 @@ def booking_queryset(request):
 
 
 def conversation_queryset(request):
-    qs = HoiThoaiKhachHang.objects.select_related("nguoi_dung", "chi_nhanh", "admin_phu_trach").prefetch_related(
+    qs = HoiThoaiKhachHang.objects.filter(da_dong=False).select_related("nguoi_dung", "chi_nhanh", "admin_phu_trach").prefetch_related(
         Prefetch("hotro_set", queryset=HoTro.objects.order_by("ngay_gui", "id"))
     )
     branch = managed_branch(request)
@@ -118,6 +118,7 @@ def paginate(request, queryset, per_page=20):
 
 def prepare_booking_row(booking, group_items=None):
     items = list(group_items or [booking])
+    booking.admin_group_items = items
     booking.admin_is_group = len(items) > 1 or booking.loaiDatSan == 1
     booking.admin_group_count = len(items)
     booking.admin_group_total = sum((item.tongGiaTien or Decimal("0")) for item in items)
@@ -127,18 +128,31 @@ def prepare_booking_row(booking, group_items=None):
     if booking.trangThai == "cancelled":
         booking.admin_flow_state = "cancelled"
         booking.admin_flow_label = "Đã hủy"
+        booking.admin_queue_priority = 4
+        booking.admin_queue_label = "Đã hủy"
     elif booking.trangThai in {"confirmed", "completed"}:
         booking.admin_flow_state = "approved"
         booking.admin_flow_label = "Đã duyệt"
+        booking.admin_queue_priority = 3
+        booking.admin_queue_label = "Đã duyệt / hoàn thành"
     elif booking.khach_xac_nhan_chuyen_khoan:
         booking.admin_flow_state = "deposited"
         booking.admin_flow_label = "Khách đã báo chuyển cọc"
+        booking.admin_queue_priority = 0
+        booking.admin_queue_label = "Cần đối soát cọc ngay"
     elif booking.yeu_cau_thanh_toan:
         booking.admin_flow_state = "waiting"
         booking.admin_flow_label = "Chờ khách đặt cọc"
+        booking.admin_queue_priority = 2
+        booking.admin_queue_label = "Đang chờ khách đặt cọc"
     else:
         booking.admin_flow_state = "new"
         booking.admin_flow_label = "Yêu cầu mới - chưa cọc"
+        booking.admin_queue_priority = 1
+        booking.admin_queue_label = "Yêu cầu mới cần xử lý"
+    booking.admin_has_conflict = False
+    booking.admin_conflict_count = 0
+    booking.admin_conflicts = []
     return booking
 
 
@@ -163,10 +177,86 @@ def grouped_booking_rows(qs):
     return rows
 
 
+def logical_booking_key(booking):
+    if booking.loaiDatSan == 1 and booking.nhom_dat_san:
+        return ("group", str(booking.nhom_dat_san))
+    return ("booking", booking.id)
+
+
+def mark_booking_conflicts(rows, scope_qs):
+    active_items = [
+        item
+        for row in rows
+        if row.trangThai != "cancelled"
+        for item in row.admin_group_items
+    ]
+    if not active_items:
+        return rows
+
+    dates = {item.ngayBatDau for item in active_items}
+    court_ids = {item.san_id for item in active_items}
+    candidates = list(
+        scope_qs.filter(
+            ngayBatDau__in=dates,
+            san_id__in=court_ids,
+            trangThai__in=["pending", "confirmed", "completed"],
+        ).order_by("ngayBatDau", "gioBatDau", "id")
+    )
+    candidates_by_slot = {}
+    for candidate in candidates:
+        candidates_by_slot.setdefault((candidate.san_id, candidate.ngayBatDau), []).append(candidate)
+
+    for row in rows:
+        if row.trangThai == "cancelled":
+            continue
+        conflict_labels = {}
+        row_key = logical_booking_key(row)
+        for item in row.admin_group_items:
+            for candidate in candidates_by_slot.get((item.san_id, item.ngayBatDau), []):
+                if logical_booking_key(candidate) == row_key:
+                    continue
+                if item.gioBatDau < candidate.gioKetThuc and item.gioKetThuc > candidate.gioBatDau:
+                    candidate_key = logical_booking_key(candidate)
+                    conflict_labels[candidate_key] = (
+                        f"{candidate.ngayBatDau:%d/%m} {candidate.gioBatDau:%H:%M}-{candidate.gioKetThuc:%H:%M}"
+                        f" · {candidate.tenNguoiDat} · {candidate.get_trangThai_display()}"
+                    )
+        row.admin_conflicts = list(conflict_labels.values())[:3]
+        row.admin_conflict_count = len(conflict_labels)
+        row.admin_has_conflict = bool(conflict_labels)
+    return rows
+
+
+def sort_booking_rows_for_operations(rows):
+    rows.sort(
+        key=lambda booking: (
+            booking.admin_queue_priority,
+            0 if booking.admin_has_conflict else 1,
+            booking.admin_group_first_date,
+            booking.gioBatDau,
+            booking.san.maChiNhanh.tenChiNhanh,
+            booking.san.tenSan,
+            booking.id,
+        )
+    )
+    return rows
+
+
+def booking_operations_summary(rows):
+    return {
+        "total": len(rows),
+        "new": sum(row.admin_flow_state == "new" for row in rows),
+        "deposited": sum(row.admin_flow_state == "deposited" for row in rows),
+        "waiting": sum(row.admin_flow_state == "waiting" for row in rows),
+        "conflicts": sum(row.admin_has_conflict for row in rows),
+    }
+
+
 def apply_booking_filters(request, qs):
     status = request.GET.get("status", "")
     pay = request.GET.get("pay", "")
     branch_id = request.GET.get("branch", "")
+    court_id = request.GET.get("court", "")
     date_from = request.GET.get("from", "")
     date_to = request.GET.get("to", "")
     query = request.GET.get("q", "").strip()
@@ -179,6 +269,8 @@ def apply_booking_filters(request, qs):
         qs = qs.filter(daThanhToan=False)
     if branch_id.isdigit() and not managed_branch(request):
         qs = qs.filter(san__maChiNhanh_id=int(branch_id))
+    if court_id.isdigit():
+        qs = qs.filter(san_id=int(court_id))
     if date_from:
         qs = qs.filter(ngayBatDau__gte=date_from)
     if date_to:
@@ -317,7 +409,9 @@ def admin_dashboard(request):
         "customers": customer_qs.count(),
     }
 
-    today_schedule = bookings.filter(ngayBatDau=today).order_by("-gioBatDau", "-id")[:12]
+    today_schedule = bookings.filter(ngayBatDau=today).order_by(
+        "san__maChiNhanh__tenChiNhanh", "gioBatDau", "san__tenSan", "id"
+    )[:12]
     recent_bookings = grouped_booking_rows(bookings.order_by("-ngay_tao", "-ngayBatDau", "-gioBatDau"))[:10]
     support_threads = conversations.annotate(last_message=Max("hotro_set__ngay_gui")).order_by("-last_message")[:8]
 
@@ -336,16 +430,25 @@ def admin_dashboard(request):
 
 @console_required
 def admin_bookings(request):
-    qs = apply_booking_filters(request, booking_queryset(request)).order_by("-ngayBatDau", "-gioBatDau", "-ngay_tao")
+    scope_qs = booking_queryset(request)
+    qs = apply_booking_filters(request, scope_qs).order_by("ngayBatDau", "gioBatDau", "san__tenSan", "ngay_tao")
     rows = grouped_booking_rows(qs)
+    mark_booking_conflicts(rows, scope_qs)
+    sort_booking_rows_for_operations(rows)
+    summary = booking_operations_summary(rows)
+    query_params = request.GET.copy()
+    query_params.pop("page", None)
     return render(
         request,
         "admin_console/bookings.html",
         {
             "active_nav": "bookings",
             "bookings": paginate(request, rows, 25),
+            "booking_summary": summary,
             "branches": branch_queryset(request),
+            "courts": court_queryset(request),
             "status_choices": DatSan.TRANG_THAI_CHOICES,
+            "query_without_page": query_params.urlencode(),
         },
     )
 
@@ -533,7 +636,12 @@ def admin_post_action(request, post_id):
     elif action == "delete":
         post.delete()
         messages.success(request, "Đã xóa bài viết.")
-    return redirect(request.POST.get("next") or "admin_posts")
+    else:
+        messages.error(request, "Thao tác bài viết không hợp lệ.")
+    target = request.POST.get("next") or reverse("admin_posts")
+    if not url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        target = reverse("admin_posts")
+    return redirect(target)
 
 
 @console_required

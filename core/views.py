@@ -1,6 +1,7 @@
 import uuid
 import json
 import re
+import unicodedata
 import logging
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
@@ -10,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from datetime import datetime, date, timedelta
 from django.db import transaction
-from django.db.models import Q, Min, Max, Sum, Prefetch
+from django.db.models import F, Q, Min, Max, Sum, Prefetch
 from django.http import JsonResponse, Http404, HttpResponse
 from django.views.decorators.http import require_POST
 from decimal import Decimal
@@ -42,7 +43,11 @@ logger = logging.getLogger("security")
 # LOGIC TÍNH TIỀN THEO 3 LOẠI GIÁ MỚI
 # ==========================================
 def natural_sort_key(value):
-    return [int(part) if part.isdigit() else part.lower() for part in re.split(r'(\d+)', value or '')]
+    """Sort tự nhiên cho tiếng Việt + số: Lê Giang 1 đứng trước Lê Giang 2/10."""
+    text = str(value or "").strip().casefold()
+    text = unicodedata.normalize("NFD", text)
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+    return [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", text)]
 
 
 def tinh_tien_chi_tiet(san, loai_dat, gio_bd, gio_kt):
@@ -54,7 +59,8 @@ def tinh_tien_chi_tiet(san, loai_dat, gio_bd, gio_kt):
     start = Decimal(gio_bd.hour) + Decimal(gio_bd.minute) / 60
     end = Decimal(gio_kt.hour) + Decimal(gio_kt.minute) / 60
     duration = end - start
-    if duration <= 0: return 0
+    if duration <= 0:
+        return Decimal('0')
     
     # Giá sân cố định và tiền cọc 10.000đ/buổi là hai khoản riêng biệt.
     if int(loai_dat) == 1:
@@ -125,7 +131,7 @@ def home(request):
     
     ds_don_gan_day = []
     if request.user.is_authenticated:
-        today = timezone.now().date()
+        today = timezone.localdate()
         all_user_orders = DatSan.objects.filter(
             nguoi_dat=request.user, 
             ngayBatDau__gte=today,
@@ -335,7 +341,7 @@ def dat_san_view(request):
 @login_required(login_url='login')
 def lich_su_dat_san(request):  
     raw_orders = DatSan.objects.filter(nguoi_dat=request.user).select_related('san', 'san__maChiNhanh').order_by('ngayBatDau', 'gioBatDau') 
-    grouped_history = []; seen_groups = set(); today = timezone.now().date()
+    grouped_history = []; seen_groups = set(); today = timezone.localdate()
     for item in raw_orders:
         if item.loaiDatSan == 0:
             is_upcoming = item.ngayBatDau >= today and item.trangThai in ['confirmed', 'pending']
@@ -392,7 +398,7 @@ def lich_su_dat_san(request):
                 'show_invoice': item.trangThai in {'confirmed', 'completed'},
             })
             seen_groups.add(item.nhom_dat_san)
-    grouped_history.sort(key=lambda x: (x['sort_date'].toordinal(), x['sort_branch'], x['sort_court'], x['sort_time']))
+    grouped_history.sort(key=lambda x: (x['sort_date'].toordinal(), natural_sort_key(x['sort_branch']), natural_sort_key(x['sort_court']), x['sort_time']))
     return render(request, 'lich_su.html', {'grouped_history': grouped_history})
 
 
@@ -619,42 +625,116 @@ def lich_cong_dong(request):
             messages.error(request, "Ngày xem lịch không hợp lệ.")
             return redirect('lich_cong_dong')
     else:
-        ngay_xem = timezone.now().date()
-    ds_san = SanCauLong.objects.select_related('maChiNhanh').order_by('-maChiNhanh__tenChiNhanh', '-tenSan')
-    ds_dat_cho = DatSan.objects.filter(ngayBatDau=ngay_xem, trangThai__in=['confirmed', 'pending', 'completed']).select_related('san', 'san__maChiNhanh', 'nguoi_dat').order_by('-gioBatDau', '-san__tenSan', '-id')
-    san_id = request.GET.get('san'); 
+        ngay_xem = timezone.localdate()
+
+    san_id = request.GET.get('san')
+    san_dang_chon = None
     if san_id:
         if not san_id.isdigit():
             messages.error(request, "Sân lọc không hợp lệ.")
             return redirect('lich_cong_dong')
-        ds_dat_cho = ds_dat_cho.filter(san_id=int(san_id))
-    return render(request, 'lich_cong_dong.html', {'ds_dat_cho': ds_dat_cho, 'ds_san': ds_san, 'ngay_hien_tai': ngay_xem, 'san_dang_chon': int(san_id) if san_id else None})
+        san_dang_chon = int(san_id)
+
+    # Template đang dùng {% regroup ds_san by maChiNhanh %}, nên danh sách sân phải
+    # được sắp xếp theo chi nhánh trước để optgroup không bị đảo/thành nhiều nhóm rời rạc.
+    ds_san = list(
+        SanCauLong.objects
+        .filter(is_active=True)
+        .select_related('maChiNhanh')
+    )
+    ds_san.sort(
+        key=lambda san: (
+            natural_sort_key(san.maChiNhanh.tenChiNhanh),
+            natural_sort_key(san.tenSan),
+            san.id,
+        )
+    )
+
+    ds_dat_cho = (
+        DatSan.objects
+        .filter(
+            ngayBatDau=ngay_xem,
+            trangThai__in=['confirmed', 'pending', 'completed'],
+        )
+        .select_related('san', 'san__maChiNhanh', 'nguoi_dat')
+    )
+    if san_dang_chon:
+        ds_dat_cho = ds_dat_cho.filter(san_id=san_dang_chon)
+
+    # Template đang dùng regroup theo chi nhánh rồi theo giờ. regroup không tự sort,
+    # nên phải chuyển sang list và sort tự nhiên trước khi render.
+    ds_dat_cho = list(ds_dat_cho)
+    ds_dat_cho.sort(
+        key=lambda slot: (
+            natural_sort_key(slot.san.maChiNhanh.tenChiNhanh),
+            slot.gioBatDau,
+            natural_sort_key(slot.san.tenSan),
+            slot.id,
+        )
+    )
+
+    return render(request, 'lich_cong_dong.html', {
+        'ds_dat_cho': ds_dat_cho,
+        'ds_san': ds_san,
+        'ngay_hien_tai': ngay_xem,
+        'san_dang_chon': san_dang_chon,
+    })
 
 @login_required(login_url='login')
+@require_POST
 def update_recruitment(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body); booking = get_object_or_404(DatSan, id=data.get('id'), nguoi_dat=request.user)
-            count = int(data.get('count', 0))
-            if count < 0 or count > 10:
-                return JsonResponse({'status': 'error', 'message': 'Số lượng cần tuyển phải từ 0 đến 10.'}, status=400)
-            booking.soLuongTuyen = count; booking.tuyenThanhVien = data.get('enable', False) and count > 0
-            if booking.tuyenThanhVien:
-                booking.trinh_do_can = data.get('trinh_do', 'tb')
-                raw_note = data.get('ghi_chu', '')
-                booking.ghi_chu_tuyen = normalize_plain_text(raw_note, max_length=255, field_label="Ghi chú tuyển") if raw_note else ''
-            booking.save(); return JsonResponse({'status': 'success'})
-        except (TypeError, ValueError, json.JSONDecodeError) as exc:
-            if hasattr(exc, "messages"):
-                return JsonResponse({'status': 'error', 'message': exc.messages[0]}, status=400)
-            return JsonResponse({'status': 'error', 'message': 'Dữ liệu cập nhật không hợp lệ.'}, status=400)
-    return JsonResponse({'status': 'error'}, status=405)
+    try:
+        data = json.loads(request.body.decode('utf-8') if request.body else '{}')
+        booking = get_object_or_404(DatSan, id=data.get('id'), nguoi_dat=request.user)
+
+        if booking.trangThai not in {'pending', 'confirmed'}:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Chỉ có thể cập nhật tuyển thành viên cho đơn đang chờ duyệt hoặc đã duyệt.',
+            }, status=400)
+
+        if booking.ngayBatDau < timezone.localdate():
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Không thể cập nhật tuyển thành viên cho lịch đã qua.',
+            }, status=400)
+
+        count = int(data.get('count', 0))
+        if count < 0 or count > 10:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Số lượng cần tuyển phải từ 0 đến 10.',
+            }, status=400)
+
+        enable = bool(data.get('enable')) and count > 0
+        booking.soLuongTuyen = count
+        booking.tuyenThanhVien = enable
+
+        if enable:
+            booking.trinh_do_can = data.get('trinh_do') or 'tb'
+            raw_note = data.get('ghi_chu', '')
+            booking.ghi_chu_tuyen = normalize_plain_text(
+                raw_note,
+                max_length=255,
+                field_label="Ghi chú tuyển",
+            ) if raw_note else ''
+        else:
+            booking.trinh_do_can = 'tb'
+            booking.ghi_chu_tuyen = ''
+
+        booking.save(update_fields=['soLuongTuyen', 'tuyenThanhVien', 'trinh_do_can', 'ghi_chu_tuyen'])
+        return JsonResponse({'status': 'success'})
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        if hasattr(exc, "messages"):
+            return JsonResponse({'status': 'error', 'message': exc.messages[0]}, status=400)
+        return JsonResponse({'status': 'error', 'message': 'Dữ liệu cập nhật không hợp lệ.'}, status=400)
 
 @login_required(login_url='login')
 def dien_dan_view(request):
-    query = request.GET.get('q', ''); ds_bai = BaiDang.objects.filter(duyet_bai=True)
+    query = request.GET.get('q', '').strip()[:100]
+    ds_bai = BaiDang.objects.filter(duyet_bai=True)
     if query: ds_bai = ds_bai.filter(Q(tieu_de__icontains=query) | Q(noi_dung__icontains=query))
-    return render(request, 'dien_dan.html', {'ds_bai': ds_bai.order_by('-ngay_dang')})
+    return render(request, 'dien_dan.html', {'ds_bai': ds_bai.order_by('-ngay_dang'), 'query': query})
 
 @login_required(login_url='login')
 def chi_tiet_bai_viet(request, bai_id):
@@ -663,9 +743,13 @@ def chi_tiet_bai_viet(request, bai_id):
         raise Http404("Bài viết không tồn tại.")
     da_xem = request.session.get('viewed_posts', [])
     if bai_id not in da_xem:
-        bai.luot_xem += 1; bai.save(); da_xem.append(bai_id); request.session['viewed_posts'] = da_xem; request.session.modified = True
+        BaiDang.objects.filter(id=bai.id).update(luot_xem=F('luot_xem') + 1)
+        bai.refresh_from_db(fields=['luot_xem'])
+        da_xem.append(bai_id)
+        request.session['viewed_posts'] = da_xem
+        request.session.modified = True
+    form = BinhLuanForm(request.POST or None)
     if request.method == 'POST':
-        form = BinhLuanForm(request.POST)
         if form.is_valid():
             bl = form.save(commit=False); bl.bai_dang = bai; bl.nguoi_binh_luan = request.user
             parent_id = request.POST.get('parent_id')
@@ -673,7 +757,7 @@ def chi_tiet_bai_viet(request, bai_id):
                 try: bl.parent = BinhLuan.objects.get(id=parent_id, bai_dang=bai)
                 except BinhLuan.DoesNotExist: pass
             bl.save(); return redirect('chi_tiet_bai_viet', bai_id=bai.id)
-    return render(request, 'chi_tiet_bai_viet.html', {'bai': bai, 'ds_binh_luan': bai.binh_luan_set.filter(parent=None).order_by('-ngay_tao'), 'form': BinhLuanForm()})
+    return render(request, 'chi_tiet_bai_viet.html', {'bai': bai, 'ds_binh_luan': bai.binh_luan_set.filter(parent=None).order_by('-ngay_tao'), 'form': form})
 
 @login_required(login_url='login')
 @require_POST

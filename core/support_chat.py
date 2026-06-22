@@ -733,14 +733,14 @@ def serialize_conversation(conversation):
 
 
 def serialize_customer_state(user):
-    conversation = get_customer_conversation(user)
-    messages = [serialize_message(item) for item in conversation.hotro_set.order_by("ngay_gui", "id")]
+    conversation = HoiThoaiKhachHang.objects.filter(nguoi_dung=user, da_dong=False).order_by("-ngay_tao").first()
+    messages = [serialize_message(item) for item in conversation.hotro_set.order_by("ngay_gui", "id")] if conversation else []
     branches = [
         {"id": branch.id, "name": branch.tenChiNhanh, "manager": branch.tenQuanLy}
         for branch in ChiNhanh.objects.all().order_by("tenChiNhanh")
     ]
     return {
-        "conversation": serialize_conversation(conversation),
+        "conversation": serialize_conversation(conversation) if conversation else None,
         "messages": messages,
         "branches": branches,
     }

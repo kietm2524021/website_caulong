@@ -35,6 +35,52 @@
     .bulk-action.cancel { color: #b91c1c; border-color: #fca5a5; }
     .bulk-action.delete { color: #fff; background: #b91c1c; border-color: #b91c1c; }
     .bulk-action:disabled { opacity: .45; cursor: not-allowed; }
+    .operations-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .summary-box { border: 1px solid var(--admin-border); background: #fff; padding: 12px 14px; border-radius: 8px; min-width: 0; }
+    .summary-box strong { display: block; font-size: 1.35rem; line-height: 1.1; color: #0f172a; }
+    .summary-box span { color: #64748b; font-size: .72rem; font-weight: 800; }
+    .summary-box.urgent { border-color: #fda4af; background: #fff1f2; }
+    .summary-box.deposit { border-color: #fde047; background: #fefce8; }
+    .summary-box.conflict { border-color: #f87171; background: #fef2f2; }
+    .operations-panel .panel-header { position: sticky; top: 64px; z-index: 4; background: #fff; }
+    .queue-group + .queue-group { border-top: 8px solid #f1f5f9; }
+    .queue-heading { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: #f8fafc; border-bottom: 1px solid var(--admin-border); }
+    .queue-heading h3 { margin: 0; font-size: .82rem; font-weight: 900; color: #334155; text-transform: uppercase; }
+    .queue-heading span { color: #64748b; font-size: .72rem; font-weight: 800; }
+    .booking-item { display: grid; grid-template-columns: 34px 132px minmax(190px, 1.3fr) minmax(155px, 1fr) 130px minmax(175px, 1fr); gap: 12px; align-items: start; padding: 14px 16px; border-bottom: 1px solid #e5edf5; position: relative; }
+    .booking-item::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: #cbd5e1; }
+    .booking-item.flow-new::before { background: #e11d48; }
+    .booking-item.flow-waiting::before { background: #f97316; }
+    .booking-item.flow-deposited::before { background: #eab308; }
+    .booking-item.flow-approved::before { background: #16a34a; }
+    .booking-item.flow-cancelled::before { background: #94a3b8; }
+    .booking-item.has-conflict { background: #fff7f7; }
+    .booking-item:hover { background: #f8fafc; }
+    .booking-time strong { display: block; color: #0f172a; font-size: .9rem; }
+    .booking-time .time-range { display: inline-flex; margin-top: 4px; padding: 4px 7px; border-radius: 6px; background: #e2e8f0; color: #0f172a; font-size: .78rem; font-weight: 900; }
+    .booking-code { color: #475569; font-size: .72rem; font-weight: 900; }
+    .booking-customer { display: block; color: #0f172a; font-weight: 900; margin: 3px 0; }
+    .booking-venue strong { display: block; color: #0f766e; }
+    .booking-finance strong { color: #0f172a; }
+    .booking-meta { color: #64748b; font-size: .72rem; line-height: 1.45; }
+    .conflict-alert { grid-column: 2 / -1; border: 1px solid #fca5a5; background: #fff; color: #991b1b; padding: 9px 11px; border-radius: 7px; font-size: .74rem; }
+    .conflict-alert strong { display: block; margin-bottom: 3px; }
+    .conflict-line { display: inline-block; margin-right: 12px; }
+    .booking-actions { grid-column: 2 / -1; padding-top: 2px; min-width: 0; }
+    .booking-empty { padding: 38px 16px; }
+    @media (max-width: 1200px) {
+        .operations-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .booking-item { grid-template-columns: 34px 118px minmax(180px, 1.4fr) minmax(150px, 1fr); }
+        .booking-finance, .booking-state { grid-column: auto; }
+        .conflict-alert, .booking-actions { grid-column: 2 / -1; }
+    }
+    @media (max-width: 768px) {
+        .operations-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .operations-panel .panel-header { position: static; align-items: flex-start; }
+        .booking-item { grid-template-columns: 30px minmax(0, 1fr); }
+        .booking-time, .booking-main, .booking-venue, .booking-finance, .booking-state, .conflict-alert, .booking-actions { grid-column: 2; }
+        .booking-actions { justify-content: flex-start; }
+    }
 </style>
 {% endblock %}
 
@@ -76,6 +122,15 @@
                 </select>
             </div>
             <div>
+                <label class="form-label small fw-bold">Sân</label>
+                <select class="form-select" name="court">
+                    <option value="">Tất cả sân</option>
+                    {% for court in courts %}
+                        <option value="{{ court.id }}" {% if request.GET.court == court.id|stringformat:"s" %}selected{% endif %}>{{ court.maChiNhanh.tenChiNhanh }} · {{ court.tenSan }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
                 <label class="form-label small fw-bold">Từ ngày</label>
                 <input class="form-control" type="date" name="from" value="{{ request.GET.from }}">
             </div>
@@ -89,11 +144,20 @@
     </div>
 </section>
 
-<section class="panel">
+<div class="operations-summary">
+    <div class="summary-box"><strong>{{ booking_summary.total|dotsep }}</strong><span>Tổng đơn theo bộ lọc</span></div>
+    <div class="summary-box urgent"><strong>{{ booking_summary.new|dotsep }}</strong><span>Yêu cầu mới</span></div>
+    <div class="summary-box deposit"><strong>{{ booking_summary.deposited|dotsep }}</strong><span>Cần đối soát cọc</span></div>
+    <div class="summary-box"><strong>{{ booking_summary.waiting|dotsep }}</strong><span>Chờ khách đặt cọc</span></div>
+    <div class="summary-box conflict"><strong>{{ booking_summary.conflicts|dotsep }}</strong><span>Đơn có dấu hiệu chồng lịch</span></div>
+</div>
+
+<section class="panel operations-panel">
     <div class="panel-header">
         <h2 class="panel-title">Danh sách đơn</h2>
         <div class="bulk-toolbar">
             <span class="muted small">{{ bookings.paginator.count|dotsep }} kết quả</span>
+            <label class="muted small fw-bold d-inline-flex align-items-center gap-2"><input class="form-check-input" type="checkbox" id="selectAllBookings" aria-label="Chọn tất cả đơn trên trang"> Chọn trang</label>
             <span class="bulk-count" id="bulkSelectedCount">Chưa chọn đơn</span>
             <form method="post" action="{% url 'admin_booking_bulk_action' %}" id="bulkBookingForm" class="d-flex gap-2 flex-wrap" onsubmit="return prepareBulkAction(event, this);">
                 {% csrf_token %}
@@ -107,55 +171,53 @@
             </form>
         </div>
     </div>
-    <div class="table-responsive">
-        <table class="table-admin">
-            <thead>
-                <tr>
-                    <th style="width:44px"><input class="form-check-input" type="checkbox" id="selectAllBookings" aria-label="Chọn tất cả đơn trên trang"></th>
-                    <th>Đơn & khách hàng</th>
-                    <th>Sân & lịch chơi</th>
-                    <th>Loại</th>
-                    <th>Tài chính</th>
-                    <th>Tình trạng</th>
-                    <th class="text-end">Thao tác</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for booking in bookings %}
-                <tr class="booking-row flow-{{ booking.admin_flow_state }}">
-                    <td><input class="form-check-input booking-select" type="checkbox" name="booking_ids" value="{{ booking.id }}" form="bulkBookingForm" aria-label="Chọn đơn #{{ booking.id }}"></td>
-                    <td>
-                        <strong>#{% if booking.loaiDatSan == 1 %}{{ booking.nhom_dat_san|stringformat:".8s" }}{% else %}{{ booking.id }}{% endif %}</strong><br>
-                        {% if booking.admin_is_group %}
-                            <span class="status-pill st-completed">{{ booking.admin_group_count }} buổi</span><br>
+    <div class="booking-queue-list">
+        {% regroup bookings by admin_queue_label as booking_queues %}
+        {% for queue in booking_queues %}
+            <section class="queue-group">
+                <div class="queue-heading">
+                    <h3>{{ queue.grouper }}</h3>
+                    <span>{{ queue.list|length }} đơn trên trang</span>
+                </div>
+                {% for booking in queue.list %}
+                    <article class="booking-item flow-{{ booking.admin_flow_state }}{% if booking.admin_has_conflict %} has-conflict{% endif %}">
+                        <div>
+                            <input class="form-check-input booking-select" type="checkbox" name="booking_ids" value="{{ booking.id }}" form="bulkBookingForm" aria-label="Chọn đơn #{{ booking.id }}">
+                        </div>
+                        <div class="booking-time">
+                            {% if booking.admin_is_group and booking.admin_group_first_date != booking.admin_group_last_date %}
+                                <strong>{{ booking.admin_group_first_date|date:"d/m" }} - {{ booking.admin_group_last_date|date:"d/m/Y" }}</strong>
+                            {% else %}
+                                <strong>{{ booking.ngayBatDau|date:"d/m/Y" }}</strong>
+                            {% endif %}
+                            <span class="time-range">{{ booking.gioBatDau|date:"H:i" }} - {{ booking.gioKetThuc|date:"H:i" }}</span>
+                        </div>
+                        <div class="booking-main">
+                            <div class="booking-code">#{% if booking.loaiDatSan == 1 %}{{ booking.nhom_dat_san|stringformat:".8s" }}{% else %}{{ booking.id }}{% endif %} · gửi {{ booking.ngay_tao|date:"d/m H:i" }}</div>
+                            <span class="booking-customer">{{ booking.tenNguoiDat }}</span>
+                            <div class="booking-meta"><i class="fa-solid fa-phone me-1"></i>{{ booking.sdt }} · {{ booking.get_loaiDatSan_display }}</div>
+                            {% if booking.admin_is_group %}<div class="booking-meta">{{ booking.admin_group_count }} buổi · {{ booking.get_lich_tap_display }}</div>{% endif %}
+                        </div>
+                        <div class="booking-venue">
+                            <strong>{{ booking.san.tenSan }}</strong>
+                            <div class="booking-meta">{{ booking.san.maChiNhanh.tenChiNhanh }}</div>
+                        </div>
+                        <div class="booking-finance">
+                            <strong>{{ booking.admin_group_total|dotsep }}đ</strong>
+                            <div class="booking-meta">Cọc {{ booking.admin_group_deposit|dotsep }}đ</div>
+                        </div>
+                        <div class="booking-state">
+                            <span class="flow-badge {{ booking.admin_flow_state }}">{{ booking.admin_flow_label }}</span>
+                            {% if booking.ly_do_huy %}<div class="cancel-reason"><strong>Lý do:</strong> {{ booking.ly_do_huy }}</div>{% endif %}
+                        </div>
+
+                        {% if booking.admin_has_conflict %}
+                            <div class="conflict-alert">
+                                <strong><i class="fa-solid fa-triangle-exclamation me-1"></i>Chồng lịch với {{ booking.admin_conflict_count }} đơn khác trên cùng sân</strong>
+                                {% for conflict in booking.admin_conflicts %}<span class="conflict-line">{{ conflict }}</span>{% endfor %}
+                            </div>
                         {% endif %}
-                        <strong>{{ booking.tenNguoiDat }}</strong> · <span class="muted small">{{ booking.ngay_tao|date:"d/m H:i" }}</span><br>
-                        <span class="muted small">{{ booking.sdt }}</span>
-                    </td>
-                    <td>
-                        <strong>{{ booking.san.tenSan }}</strong> · <span class="muted small">{{ booking.san.maChiNhanh.tenChiNhanh }}</span><br>
-                        {% if booking.admin_is_group and booking.admin_group_first_date != booking.admin_group_last_date %}
-                            <span class="muted small">{{ booking.admin_group_first_date|date:"d/m/Y" }} - {{ booking.admin_group_last_date|date:"d/m/Y" }}</span><br>
-                        {% else %}
-                            <span class="muted small">{{ booking.ngayBatDau|date:"d/m/Y" }}</span><br>
-                        {% endif %}
-                        <span class="muted small">{{ booking.gioBatDau|date:"H:i" }} - {{ booking.gioKetThuc|date:"H:i" }}</span>
-                    </td>
-                    <td>
-                        {{ booking.get_loaiDatSan_display }}
-                        {% if booking.admin_is_group %}
-                            <div class="muted small">{{ booking.get_lich_tap_display }}</div>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <strong>{{ booking.admin_group_total|dotsep }}đ</strong><br>
-                        <div class="muted small mt-1">Cọc: {{ booking.admin_group_deposit|dotsep }}đ</div>
-                    </td>
-                    <td>
-                        <span class="flow-badge {{ booking.admin_flow_state }}">{{ booking.admin_flow_label }}</span>
-                        {% if booking.ly_do_huy %}<div class="cancel-reason"><strong>Lý do:</strong> {{ booking.ly_do_huy }}</div>{% endif %}
-                    </td>
-                    <td class="text-end">
+
                         <div class="booking-actions">
                             {% if booking.trangThai == 'confirmed' or booking.trangThai == 'completed' %}
                                 <a class="booking-action invoice" href="{% url 'xuat_hoa_don' booking.id %}"><i class="fa-solid fa-file-invoice"></i> Hóa đơn</a>
@@ -185,13 +247,12 @@
                                 </form>
                             {% endif %}
                         </div>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="7"><div class="empty-state">Không có đơn phù hợp bộ lọc.</div></td></tr>
+                    </article>
                 {% endfor %}
-            </tbody>
-        </table>
+            </section>
+        {% empty %}
+            <div class="empty-state booking-empty">Không có đơn phù hợp bộ lọc.</div>
+        {% endfor %}
     </div>
 </section>
 
@@ -199,11 +260,11 @@
 <nav>
     <ul class="pagination">
         {% if bookings.has_previous %}
-            <li class="page-item"><a class="page-link" href="?page={{ bookings.previous_page_number }}">Trước</a></li>
+            <li class="page-item"><a class="page-link" href="?{% if query_without_page %}{{ query_without_page }}&{% endif %}page={{ bookings.previous_page_number }}">Trước</a></li>
         {% endif %}
         <li class="page-item active"><span class="page-link">{{ bookings.number }}/{{ bookings.paginator.num_pages }}</span></li>
         {% if bookings.has_next %}
-            <li class="page-item"><a class="page-link" href="?page={{ bookings.next_page_number }}">Sau</a></li>
+            <li class="page-item"><a class="page-link" href="?{% if query_without_page %}{{ query_without_page }}&{% endif %}page={{ bookings.next_page_number }}">Sau</a></li>
         {% endif %}
     </ul>
 </nav>

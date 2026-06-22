@@ -691,8 +691,8 @@ def smalltalk_reply(message: str) -> Optional[str]:
 
     if normalized in GREETING_KEYWORDS or any(normalized.startswith(f"{word} ") for word in GREETING_KEYWORDS):
         return (
-            "Mình đây. Bạn có thể hỏi nhanh như: hôm nay còn sân trống không, ngày mai có sân nào tuyển thành viên không, "
-            "giá sân bao nhiêu, cách đặt cọc hoặc cách hủy đơn."
+            "Xin chào, mình là AI hỗ trợ. Bạn có thể hỏi về sân trống, lịch đang tuyển thành viên, "
+            "đặt sân, tài khoản hoặc diễn đàn nhé."
         )
 
     return None
