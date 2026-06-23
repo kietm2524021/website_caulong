@@ -16,6 +16,7 @@
         .navbar { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
         .footer { margin-top: auto; background: #2d3436; color: #b2bec3; padding: 24px 0; }
         .support-fab { position: fixed; left: 22px; bottom: 22px; z-index: 1040; width: 58px; height: 58px; border-radius: 50%; border: none; background: #0f766e; color: #fff; box-shadow: 0 12px 30px rgba(15, 118, 110, .35); display: flex; align-items: center; justify-content: center; font-size: 1.35rem; }
+        .support-fab-badge { position: absolute; top: -4px; right: -4px; width: 18px; height: 18px; border-radius: 50%; background: #dc2626; border: 2px solid #fff; display: none; }
         .support-panel { position: fixed; left: 22px; bottom: 92px; z-index: 1041; width: min(380px, calc(100vw - 28px)); height: 560px; max-height: calc(100vh - 120px); background: #fff; border: 1px solid #dbe3ee; border-radius: 12px; box-shadow: 0 24px 60px rgba(15, 23, 42, .18); display: none; overflow: hidden; }
         .support-panel.open { display: flex; flex-direction: column; }
         .support-panel-head { background: #0f172a; color: white; padding: 14px 16px; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
@@ -31,6 +32,13 @@
         .support-panel-form button, .support-quick-admin { border: none; border-radius: 999px; background: #0f766e; color: white; font-weight: 700; padding: 9px 12px; }
         .support-close { border: none; background: transparent; color: white; font-size: 1rem; }
         .support-danger { background: #b91c1c; }
+        .live-toast-stack { position: fixed; right: 18px; top: 82px; z-index: 1200; display: grid; gap: 10px; width: min(360px, calc(100vw - 28px)); }
+        .live-toast { border: 1px solid #bae6fd; background: #f0f9ff; color: #0f172a; border-radius: 10px; box-shadow: 0 18px 40px rgba(15, 23, 42, .16); padding: 12px 13px; display: grid; grid-template-columns: 32px 1fr auto; gap: 10px; align-items: start; }
+        .live-toast-icon { width: 32px; height: 32px; border-radius: 9px; background: #0f766e; color: #fff; display: flex; align-items: center; justify-content: center; }
+        .live-toast-title { font-weight: 800; font-size: .86rem; }
+        .live-toast-body { color: #475569; font-size: .76rem; line-height: 1.45; margin-top: 2px; }
+        .live-toast-action { border: 0; border-radius: 7px; background: #0f766e; color: #fff; padding: 6px 9px; font-size: .72rem; font-weight: 800; white-space: nowrap; }
+        .live-toast-close { border: 0; background: transparent; color: #64748b; font-weight: 800; padding: 0 2px; }
     </style>
 </head>
 <body>
@@ -100,8 +108,10 @@
     </footer>
 
     {% if user.is_authenticated and not user.is_staff and not user.is_superuser and user.role == 'customer' %}
+    <div class="live-toast-stack" id="customerLiveToastStack" aria-live="polite"></div>
     <button class="support-fab" id="supportFab" type="button" aria-label="Mở tin nhắn hỗ trợ">
         <i class="fa-solid fa-comment-dots"></i>
+        <span class="support-fab-badge" id="supportFabBadge"></span>
     </button>
     <section class="support-panel" id="supportPanel" aria-label="Hỗ trợ khách hàng">
         <div class="support-panel-head">
@@ -136,6 +146,7 @@
     <script>
         document.addEventListener("DOMContentLoaded", function() {
             const fab = document.getElementById("supportFab");
+            const fabBadge = document.getElementById("supportFabBadge");
             const panel = document.getElementById("supportPanel");
             const closeBtn = document.getElementById("supportClose");
             const messagesBox = document.getElementById("supportMessages");
@@ -145,6 +156,110 @@
             const adminRequest = document.getElementById("supportAdminRequest");
             const deleteHistory = document.getElementById("supportDeleteHistory");
             const managerLabel = document.getElementById("supportManagerLabel");
+            const liveToastStack = document.getElementById("customerLiveToastStack");
+            let lastStateVersion = "";
+            let seenStateVersion = "";
+            let customerBookingSignature = window.customerBookingLiveSignature || "";
+            let bookingReloadPending = false;
+            const seenNotificationKey = "customer-live-last-notification-{{ user.id }}";
+
+            function setSupportBadge(visible) {
+                if (fabBadge) fabBadge.style.display = visible ? "block" : "none";
+            }
+
+            function showLiveToast(title, body, options) {
+                if (!liveToastStack) return null;
+                options = options || {};
+                const toast = document.createElement("div");
+                toast.className = "live-toast";
+                const icon = document.createElement("div");
+                icon.className = "live-toast-icon";
+                icon.innerHTML = '<i class="fa-solid fa-bell"></i>';
+                const content = document.createElement("div");
+                const titleEl = document.createElement("div");
+                titleEl.className = "live-toast-title";
+                titleEl.textContent = title || "Thông báo mới";
+                const bodyEl = document.createElement("div");
+                bodyEl.className = "live-toast-body";
+                bodyEl.textContent = body || "";
+                content.appendChild(titleEl);
+                content.appendChild(bodyEl);
+                const actions = document.createElement("div");
+                if (options.actionText && options.onAction) {
+                    const action = document.createElement("button");
+                    action.className = "live-toast-action";
+                    action.type = "button";
+                    action.textContent = options.actionText;
+                    action.addEventListener("click", options.onAction);
+                    actions.appendChild(action);
+                } else {
+                    const close = document.createElement("button");
+                    close.className = "live-toast-close";
+                    close.type = "button";
+                    close.textContent = "x";
+                    close.addEventListener("click", function() { toast.remove(); });
+                    actions.appendChild(close);
+                }
+                toast.appendChild(icon);
+                toast.appendChild(content);
+                toast.appendChild(actions);
+                liveToastStack.prepend(toast);
+                if (!options.sticky) setTimeout(function() { toast.remove(); }, 9000);
+                return toast;
+            }
+
+            function hasActiveFormWork() {
+                const tag = document.activeElement ? document.activeElement.tagName : "";
+                return ["INPUT", "SELECT", "TEXTAREA"].includes(tag);
+            }
+
+            function handleCustomerNotifications(notifications) {
+                if (!notifications || !notifications.items || !notifications.items.length) return;
+                const latest = notifications.items[0];
+                const stored = Number(sessionStorage.getItem(seenNotificationKey) || 0);
+                if (latest.id > stored) {
+                    sessionStorage.setItem(seenNotificationKey, String(latest.id));
+                    showLiveToast(latest.title, latest.body, {
+                        actionText: "Xem",
+                        onAction: function() { window.location.href = latest.url || "{% url 'lich_su_dat_san' %}"; }
+                    });
+                }
+            }
+
+            function handleCustomerBookingState(bookings) {
+                if (!bookings || !bookings.signature) return;
+                if (!customerBookingSignature) {
+                    customerBookingSignature = bookings.signature;
+                    return;
+                }
+                if (
+                    window.customerBookingLiveReload
+                    && bookings.signature !== customerBookingSignature
+                    && !bookingReloadPending
+                ) {
+                    bookingReloadPending = true;
+                    if (hasActiveFormWork()) {
+                        showLiveToast("Lịch đặt sân có thay đổi", "Quản lý vừa cập nhật yêu cầu đặt cọc hoặc trạng thái đơn.", {
+                            sticky: true,
+                            actionText: "Cập nhật",
+                            onAction: function() { window.location.reload(); }
+                        });
+                    } else {
+                        window.location.reload();
+                    }
+                }
+                customerBookingSignature = bookings.signature;
+            }
+
+            async function loadCustomerLive() {
+                const response = await fetch("{% url 'customer_live_state' %}", {
+                    headers: {"X-Requested-With": "XMLHttpRequest"}
+                });
+                if (!response.ok) return;
+                const data = await response.json();
+                handleCustomerNotifications(data.notifications);
+                handleCustomerBookingState(data.bookings);
+            }
 
             function csrfToken() {
                 const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
@@ -168,6 +283,11 @@
             }
 
             function renderState(data) {
+                lastStateVersion = data.state_version || "";
+                if (panel.classList.contains("open")) {
+                    seenStateVersion = lastStateVersion;
+                    setSupportBadge(false);
+                }
                 branchSelect.innerHTML = "";
                 data.branches.forEach(function(branch) {
                     const option = document.createElement("option");
@@ -197,9 +317,22 @@
                 messagesBox.scrollTop = messagesBox.scrollHeight;
             }
 
-            async function loadState() {
+            async function loadState(options) {
+                options = options || {};
                 const response = await fetch("{% url 'support_widget_state' %}");
-                if (response.ok) renderState(await response.json());
+                if (!response.ok) return;
+                const data = await response.json();
+                const incomingVersion = data.state_version || "";
+                if (!panel.classList.contains("open")) {
+                    if (!seenStateVersion) {
+                        seenStateVersion = incomingVersion;
+                    } else if (incomingVersion && incomingVersion !== seenStateVersion && incomingVersion !== lastStateVersion) {
+                        setSupportBadge(true);
+                    }
+                    lastStateVersion = incomingVersion;
+                    if (!options.forceRender) return;
+                }
+                renderState(data);
             }
 
             async function sendMessage(message, forceAdmin) {
@@ -232,7 +365,7 @@
 
             fab.addEventListener("click", function() {
                 panel.classList.toggle("open");
-                if (panel.classList.contains("open")) loadState();
+                if (panel.classList.contains("open")) loadState({forceRender: true});
             });
             closeBtn.addEventListener("click", function() { panel.classList.remove("open"); });
             form.addEventListener("submit", async function(event) {
@@ -250,9 +383,14 @@
                 await deleteConversation();
             });
 
+            loadState();
+            loadCustomerLive();
             setInterval(function() {
-                if (panel.classList.contains("open")) loadState();
-            }, 12000);
+                loadState();
+            }, 6000);
+            setInterval(function() {
+                if (!document.hidden) loadCustomerLive();
+            }, 5000);
         });
     </script>
     {% endif %}

@@ -300,6 +300,9 @@
     {% endfor %}
 </div>
 <script>
+    window.customerBookingLiveReload = true;
+    window.customerBookingLiveSignature = "{{ booking_live.signature|default:''|escapejs }}";
+
     function requestCustomerCancelReason(form) {
         const reason = window.prompt("Vui lòng nhập lý do hủy đơn để gửi đến quản lý:");
         if (!reason || !reason.trim()) return false;

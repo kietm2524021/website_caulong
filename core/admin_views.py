@@ -449,6 +449,7 @@ def admin_bookings(request):
             "courts": court_queryset(request),
             "status_choices": DatSan.TRANG_THAI_CHOICES,
             "query_without_page": query_params.urlencode(),
+            "booking_live": booking_live_payload(request),
         },
     )
 
@@ -474,6 +475,64 @@ def admin_notifications_read_all(request):
     if not url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
         target = reverse("admin_dashboard")
     return redirect(target)
+
+
+def serialize_admin_notification(notification):
+    return {
+        "id": notification.id,
+        "title": notification.tieu_de,
+        "body": notification.noi_dung,
+        "category": notification.loai,
+        "is_read": notification.is_read,
+        "created_at": notification.created_at.strftime("%H:%M %d/%m") if notification.created_at else "",
+        "open_url": reverse("admin_notification_open", args=[notification.id]),
+    }
+
+
+def booking_live_payload(request):
+    filtered_qs = apply_booking_filters(request, booking_queryset(request))
+    aggregate = filtered_qs.aggregate(latest_id=Max("id"), total=Count("id"))
+    counts = {
+        "pending": filtered_qs.filter(trangThai="pending").count(),
+        "confirmed": filtered_qs.filter(trangThai="confirmed").count(),
+        "cancelled": filtered_qs.filter(trangThai="cancelled").count(),
+        "completed": filtered_qs.filter(trangThai="completed").count(),
+        "awaiting_deposit": filtered_qs.filter(
+            trangThai="pending",
+            yeu_cau_thanh_toan=True,
+            khach_xac_nhan_chuyen_khoan=False,
+        ).count(),
+        "customer_paid": filtered_qs.filter(
+            trangThai="pending",
+            khach_xac_nhan_chuyen_khoan=True,
+        ).count(),
+    }
+    signature_parts = [
+        str(aggregate["latest_id"] or 0),
+        str(aggregate["total"] or 0),
+        *(str(value) for value in counts.values()),
+    ]
+    return {
+        "signature": ":".join(signature_parts),
+        "total": aggregate["total"] or 0,
+        "counts": counts,
+    }
+
+
+@console_required
+def admin_live_state(request):
+    notifications = ThongBao.objects.filter(nguoi_nhan=request.user)
+    conversations = conversation_queryset(request)
+    payload = {
+        "notifications": {
+            "unread_count": notifications.filter(is_read=False).count(),
+            "items": [serialize_admin_notification(item) for item in notifications[:10]],
+        },
+        "support_unread": HoTro.objects.filter(hoi_thoai__in=conversations, da_xem=False).count(),
+    }
+    if request.GET.get("bookings") == "1":
+        payload["bookings"] = booking_live_payload(request)
+    return JsonResponse(payload)
 
 
 @console_required
@@ -757,9 +816,14 @@ def admin_support_widget_state(request):
 
     messages_data = []
     active_data = None
+    state_version = ""
     if active_conversation:
         active_data = serialize_conversation(active_conversation)
         messages_data = [serialize_message(item) for item in active_conversation.hotro_set.order_by("ngay_gui", "id")]
+        state_version = "|".join(
+            f"{item['id']}:{item['sender']}:{item['reply_source']}:{item['sent_at']}:{item['replied_at']}"
+            for item in messages_data
+        )
 
     return JsonResponse(
         {
@@ -767,6 +831,7 @@ def admin_support_widget_state(request):
             "conversations": [serialize_conversation(item) for item in conversations[:20]],
             "active_conversation": active_data,
             "messages": messages_data,
+            "state_version": state_version,
         }
     )
 

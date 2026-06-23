@@ -46,6 +46,13 @@
         .notification-icon.support { color: #c2410c; background: #ffedd5; }
         .notification-icon.payment { color: #15803d; background: #dcfce7; }
         .notification-icon.system { color: #475569; background: #e2e8f0; }
+        .admin-live-toast-stack { position: fixed; right: 18px; top: 82px; z-index: 1200; display: grid; gap: 10px; width: min(380px, calc(100vw - 28px)); }
+        .admin-live-toast { border: 1px solid #fed7aa; background: #fff7ed; color: #0f172a; border-radius: 10px; box-shadow: 0 18px 40px rgba(15, 23, 42, .18); padding: 12px 13px; display: grid; grid-template-columns: 36px 1fr auto; gap: 10px; align-items: start; }
+        .admin-live-toast-icon { width: 36px; height: 36px; border-radius: 10px; background: #c2410c; color: #fff; display: flex; align-items: center; justify-content: center; }
+        .admin-live-toast-title { font-weight: 900; font-size: .88rem; }
+        .admin-live-toast-body { color: #475569; font-size: .76rem; line-height: 1.45; margin-top: 2px; }
+        .admin-live-toast-action { border: 0; border-radius: 7px; background: #0f766e; color: #fff; padding: 7px 10px; font-size: .72rem; font-weight: 900; white-space: nowrap; }
+        .admin-live-toast-close { border: 0; background: transparent; color: #64748b; font-weight: 900; padding: 0 2px; }
         .notification-title { font-size: .8rem; font-weight: 800; color: #1e293b; line-height: 1.35; }
         .notification-copy { color: #64748b; font-size: .72rem; line-height: 1.4; margin-top: 3px; }
         .notification-time { color: #94a3b8; font-size: .66rem; margin-top: 5px; }
@@ -144,23 +151,21 @@
                     <div class="dropdown">
                         <button class="notification-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="Mở thông báo quản trị">
                             <i class="fa-regular fa-bell"></i>
-                            {% if admin_unread_notifications %}<span class="notification-count">{{ admin_unread_notifications }}</span>{% endif %}
+                            <span class="notification-count" id="adminNotificationCount" {% if not admin_unread_notifications %}style="display: none;"{% endif %}>{{ admin_unread_notifications|default:0 }}</span>
                         </button>
                         <div class="dropdown-menu dropdown-menu-end notification-menu">
                             <div class="notification-head">
                                 <div>
                                     <div class="fw-bold">Thông báo</div>
-                                    <div class="muted small">{{ admin_unread_notifications|default:0 }} thông báo chưa đọc</div>
+                                    <div class="muted small" id="adminNotificationSummary">{{ admin_unread_notifications|default:0 }} thông báo chưa đọc</div>
                                 </div>
-                                {% if admin_unread_notifications %}
-                                    <form method="post" action="{% url 'admin_notifications_read_all' %}">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <button class="btn btn-link btn-sm text-decoration-none fw-bold" type="submit">Đọc tất cả</button>
-                                    </form>
-                                {% endif %}
+                                <form method="post" action="{% url 'admin_notifications_read_all' %}" id="adminNotificationReadAll" {% if not admin_unread_notifications %}style="display: none;"{% endif %}>
+                                    {% csrf_token %}
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    <button class="btn btn-link btn-sm text-decoration-none fw-bold" type="submit">Đọc tất cả</button>
+                                </form>
                             </div>
-                            <div class="notification-list">
+                            <div class="notification-list" id="adminNotificationList">
                                 {% for notification in admin_notifications %}
                                     <form method="post" action="{% url 'admin_notification_open' notification.id %}">
                                         {% csrf_token %}
@@ -200,6 +205,7 @@
             </div>
         </main>
     </div>
+    <div class="admin-live-toast-stack" id="adminLiveToastStack" aria-live="polite"></div>
     <button class="admin-support-fab" id="adminSupportFab" type="button" aria-label="Mở tin nhắn hỗ trợ chi nhánh">
         <i class="fa-solid fa-comment-dots"></i>
         <span class="admin-support-badge" id="adminSupportBadge">0</span>
@@ -244,7 +250,13 @@
             const subtitle = document.getElementById("adminSupportSubtitle");
             const form = document.getElementById("adminSupportForm");
             const input = document.getElementById("adminSupportInput");
+            const notificationCount = document.getElementById("adminNotificationCount");
+            const notificationSummary = document.getElementById("adminNotificationSummary");
+            const notificationList = document.getElementById("adminNotificationList");
+            const notificationReadAll = document.getElementById("adminNotificationReadAll");
+            const adminLiveToastStack = document.getElementById("adminLiveToastStack");
             let activeConversationId = null;
+            const seenAdminNotificationKey = "admin-live-last-notification-{{ request.user.id }}";
 
             function csrfToken() {
                 const match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
@@ -254,6 +266,130 @@
             function setBadge(count) {
                 badge.textContent = count;
                 badge.style.display = count > 0 ? "flex" : "none";
+            }
+
+            function setNotificationBadge(count) {
+                if (!notificationCount || !notificationSummary) return;
+                notificationCount.textContent = count;
+                notificationCount.style.display = count > 0 ? "flex" : "none";
+                notificationSummary.textContent = count + " thông báo chưa đọc";
+                if (notificationReadAll) notificationReadAll.style.display = count > 0 ? "block" : "none";
+            }
+
+            function iconForNotification(category) {
+                if (category === "booking") return "fa-calendar-plus";
+                if (category === "post") return "fa-pen-to-square";
+                if (category === "support") return "fa-comments";
+                if (category === "payment") return "fa-money-check-dollar";
+                return "fa-bell";
+            }
+
+            function renderNotifications(data) {
+                if (!data || !notificationList) return;
+                setNotificationBadge(data.unread_count || 0);
+                notificationList.innerHTML = "";
+                if (!data.items || !data.items.length) {
+                    const empty = document.createElement("div");
+                    empty.className = "empty-state";
+                    empty.textContent = "Chưa có thông báo mới.";
+                    notificationList.appendChild(empty);
+                    return;
+                }
+                data.items.forEach(function(item) {
+                    const formEl = document.createElement("form");
+                    formEl.method = "post";
+                    formEl.action = item.open_url;
+
+                    const csrf = document.createElement("input");
+                    csrf.type = "hidden";
+                    csrf.name = "csrfmiddlewaretoken";
+                    csrf.value = csrfToken();
+                    formEl.appendChild(csrf);
+
+                    const button = document.createElement("button");
+                    button.className = "notification-item" + (item.is_read ? "" : " unread");
+                    button.type = "submit";
+
+                    const iconWrap = document.createElement("span");
+                    iconWrap.className = "notification-icon " + (item.category || "system");
+                    const icon = document.createElement("i");
+                    icon.className = "fa-solid " + iconForNotification(item.category);
+                    iconWrap.appendChild(icon);
+
+                    const content = document.createElement("span");
+                    const titleEl = document.createElement("span");
+                    titleEl.className = "notification-title d-block";
+                    titleEl.textContent = item.title || "";
+                    const bodyEl = document.createElement("span");
+                    bodyEl.className = "notification-copy d-block";
+                    bodyEl.textContent = item.body || "";
+                    const timeEl = document.createElement("span");
+                    timeEl.className = "notification-time d-block";
+                    timeEl.textContent = item.created_at || "";
+                    content.appendChild(titleEl);
+                    content.appendChild(bodyEl);
+                    content.appendChild(timeEl);
+
+                    button.appendChild(iconWrap);
+                    button.appendChild(content);
+                    formEl.appendChild(button);
+                    notificationList.appendChild(formEl);
+                });
+            }
+
+            function showAdminLiveToast(notification) {
+                if (!adminLiveToastStack || !notification) return;
+                const toast = document.createElement("div");
+                toast.className = "admin-live-toast";
+
+                const iconWrap = document.createElement("div");
+                iconWrap.className = "admin-live-toast-icon";
+                const icon = document.createElement("i");
+                icon.className = "fa-solid " + iconForNotification(notification.category);
+                iconWrap.appendChild(icon);
+
+                const content = document.createElement("div");
+                const titleEl = document.createElement("div");
+                titleEl.className = "admin-live-toast-title";
+                titleEl.textContent = notification.title || "Thông báo mới";
+                const bodyEl = document.createElement("div");
+                bodyEl.className = "admin-live-toast-body";
+                bodyEl.textContent = notification.body || "";
+                content.appendChild(titleEl);
+                content.appendChild(bodyEl);
+
+                const action = document.createElement("button");
+                action.className = "admin-live-toast-action";
+                action.type = "button";
+                action.textContent = "Xem";
+                action.addEventListener("click", function() {
+                    const formEl = document.createElement("form");
+                    formEl.method = "post";
+                    formEl.action = notification.open_url;
+                    const csrf = document.createElement("input");
+                    csrf.type = "hidden";
+                    csrf.name = "csrfmiddlewaretoken";
+                    csrf.value = csrfToken();
+                    formEl.appendChild(csrf);
+                    document.body.appendChild(formEl);
+                    formEl.submit();
+                });
+
+                toast.appendChild(iconWrap);
+                toast.appendChild(content);
+                toast.appendChild(action);
+                adminLiveToastStack.prepend(toast);
+                setTimeout(function() { toast.remove(); }, 12000);
+            }
+
+            function handleAdminLiveNotifications(data) {
+                if (!data || !data.items || !data.items.length) return;
+                const latest = data.items[0];
+                const stored = Number(sessionStorage.getItem(seenAdminNotificationKey) || 0);
+                if (latest.id > stored) {
+                    sessionStorage.setItem(seenAdminNotificationKey, String(latest.id));
+                    showAdminLiveToast(latest);
+                }
             }
 
             function addMessage(rowType, text, meta) {
@@ -324,6 +460,15 @@
                 if (response.ok) renderWidget(await response.json());
             }
 
+            async function loadAdminLive() {
+                const response = await fetch("{% url 'admin_live_state' %}");
+                if (!response.ok) return;
+                const data = await response.json();
+                renderNotifications(data.notifications);
+                handleAdminLiveNotifications(data.notifications);
+                setBadge(data.support_unread || 0);
+            }
+
             async function replyActive(message) {
                 if (!activeConversationId || !message) return;
                 const response = await fetch("{% url 'admin_support_widget_reply' %}", {
@@ -375,9 +520,11 @@
             leaveBtn.addEventListener("click", function() { leaveConversation(); });
             deleteBtn.addEventListener("click", function() { deleteConversation(); });
             loadWidget();
+            loadAdminLive();
             setInterval(function() {
+                loadAdminLive();
                 if (panel.classList.contains("open")) loadWidget(activeConversationId);
-            }, 15000);
+            }, 5000);
         });
     </script>
     <script src="/static/js/source-guard.js" defer></script>

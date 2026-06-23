@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from datetime import datetime, date, timedelta
 from django.db import transaction
-from django.db.models import F, Q, Min, Max, Sum, Prefetch
+from django.db.models import Count, F, Q, Min, Max, Sum, Prefetch
 from django.http import JsonResponse, Http404, HttpResponse
 from django.views.decorators.http import require_POST
 from decimal import Decimal
@@ -48,6 +48,58 @@ def natural_sort_key(value):
     text = unicodedata.normalize("NFD", text)
     text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
     return [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", text)]
+
+
+def customer_booking_live_payload(user):
+    bookings = DatSan.objects.filter(nguoi_dat=user)
+    aggregate = bookings.aggregate(
+        total=Count("id"),
+        latest_id=Max("id"),
+        latest_payment_request=Max("ngay_gui_yeu_cau_thanh_toan"),
+        latest_customer_open=Max("ngay_khach_mo_thanh_toan"),
+        latest_customer_confirm=Max("ngay_khach_xac_nhan_ck"),
+    )
+    counts = {
+        "pending": bookings.filter(trangThai="pending").count(),
+        "confirmed": bookings.filter(trangThai="confirmed").count(),
+        "cancelled": bookings.filter(trangThai="cancelled").count(),
+        "completed": bookings.filter(trangThai="completed").count(),
+        "payment_requested": bookings.filter(
+            trangThai="pending",
+            yeu_cau_thanh_toan=True,
+            khach_xac_nhan_chuyen_khoan=False,
+        ).count(),
+        "waiting_manager_confirm": bookings.filter(
+            trangThai="pending",
+            khach_xac_nhan_chuyen_khoan=True,
+        ).count(),
+        "paid": bookings.filter(daThanhToan=True).count(),
+    }
+    latest_notification = ThongBao.objects.filter(nguoi_nhan=user).aggregate(latest_id=Max("id"))["latest_id"] or 0
+    signature_parts = [
+        str(aggregate["latest_id"] or 0),
+        str(aggregate["total"] or 0),
+        str(latest_notification),
+        *(str(aggregate[key] or "") for key in ("latest_payment_request", "latest_customer_open", "latest_customer_confirm")),
+        *(str(value) for value in counts.values()),
+    ]
+    return {
+        "signature": "|".join(signature_parts),
+        "total": aggregate["total"] or 0,
+        "counts": counts,
+    }
+
+
+def serialize_customer_notification(notification):
+    return {
+        "id": notification.id,
+        "title": notification.tieu_de,
+        "body": notification.noi_dung,
+        "category": notification.loai,
+        "is_read": notification.is_read,
+        "created_at": notification.created_at.strftime("%H:%M %d/%m") if notification.created_at else "",
+        "url": notification.duong_dan or reverse("lich_su_dat_san"),
+    }
 
 
 def tinh_tien_chi_tiet(san, loai_dat, gio_bd, gio_kt):
@@ -399,7 +451,26 @@ def lich_su_dat_san(request):
             })
             seen_groups.add(item.nhom_dat_san)
     grouped_history.sort(key=lambda x: (x['sort_date'].toordinal(), natural_sort_key(x['sort_branch']), natural_sort_key(x['sort_court']), x['sort_time']))
-    return render(request, 'lich_su.html', {'grouped_history': grouped_history})
+    return render(
+        request,
+        'lich_su.html',
+        {
+            'grouped_history': grouped_history,
+            'booking_live': customer_booking_live_payload(request.user),
+        },
+    )
+
+
+@login_required(login_url='login')
+def customer_live_state(request):
+    notifications = ThongBao.objects.filter(nguoi_nhan=request.user)
+    return JsonResponse({
+        "bookings": customer_booking_live_payload(request.user),
+        "notifications": {
+            "unread_count": notifications.filter(is_read=False).count(),
+            "items": [serialize_customer_notification(item) for item in notifications[:5]],
+        },
+    })
 
 
 @login_required(login_url='login')

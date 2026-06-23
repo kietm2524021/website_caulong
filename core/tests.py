@@ -795,6 +795,85 @@ class BookingSupportInvoiceTests(TestCase):
         notification.refresh_from_db()
         self.assertTrue(notification.is_read)
 
+    def test_admin_live_state_returns_notifications_support_and_booking_signature(self):
+        ThongBao.objects.create(
+            nguoi_nhan=self.admin,
+            tieu_de="Can xu ly don moi",
+            noi_dung="Co mot don dat san can kiem tra.",
+            loai="booking",
+            duong_dan=reverse("admin_bookings"),
+        )
+        conversation = HoiThoaiKhachHang.objects.create(
+            nguoi_dung=self.user,
+            chi_nhanh=self.branch,
+            can_admin=True,
+        )
+        HoTro.objects.create(
+            hoi_thoai=conversation,
+            nguoi_dung=self.user,
+            nguoi_gui="customer",
+            cau_hoi="Can gap quan ly",
+        )
+        booking = DatSan.objects.create(
+            nguoi_dat=self.user,
+            san=self.court_1,
+            ngayBatDau=timezone.localdate() + timedelta(days=1),
+            gioBatDau=time(18, 0),
+            gioKetThuc=time(19, 0),
+            trangThai="pending",
+            tongGiaTien=50000,
+        )
+
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("admin_live_state"), {"bookings": "1", "q": booking.sdt})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["notifications"]["unread_count"], 1)
+        self.assertEqual(payload["notifications"]["items"][0]["title"], "Can xu ly don moi")
+        self.assertEqual(payload["support_unread"], 1)
+        self.assertIn("signature", payload["bookings"])
+        self.assertEqual(payload["bookings"]["counts"]["pending"], 1)
+
+    def test_customer_live_state_changes_when_manager_updates_booking_flow(self):
+        booking = DatSan.objects.create(
+            nguoi_dat=self.user,
+            san=self.court_1,
+            ngayBatDau=timezone.localdate() + timedelta(days=1),
+            gioBatDau=time(18, 0),
+            gioKetThuc=time(19, 0),
+            trangThai="pending",
+            tongGiaTien=50000,
+        )
+
+        before = self.client.get(reverse("customer_live_state")).json()["bookings"]["signature"]
+        history = self.client.get(reverse("lich_su_dat_san"))
+        self.assertContains(history, "customerBookingLiveReload")
+
+        self.client.force_login(self.admin)
+        self.client.post(reverse("admin_booking_action", args=[booking.id]), {"action": "request_payment"})
+
+        self.client.force_login(self.user)
+        after_payment_request = self.client.get(reverse("customer_live_state")).json()
+        self.assertNotEqual(before, after_payment_request["bookings"]["signature"])
+        self.assertEqual(after_payment_request["bookings"]["counts"]["payment_requested"], 1)
+        self.assertEqual(after_payment_request["notifications"]["items"][0]["url"], reverse("lich_su_dat_san"))
+
+        booking.refresh_from_db()
+        booking.khach_xac_nhan_chuyen_khoan = True
+        booking.ngay_khach_xac_nhan_ck = timezone.now()
+        booking.save(update_fields=["khach_xac_nhan_chuyen_khoan", "ngay_khach_xac_nhan_ck"])
+        mid_signature = after_payment_request["bookings"]["signature"]
+
+        self.client.force_login(self.admin)
+        self.client.post(reverse("admin_booking_action", args=[booking.id]), {"action": "mark_transfer_received"})
+
+        self.client.force_login(self.user)
+        after_approval = self.client.get(reverse("customer_live_state")).json()["bookings"]
+        self.assertNotEqual(mid_signature, after_approval["signature"])
+        self.assertEqual(after_approval["counts"]["confirmed"], 1)
+        self.assertEqual(after_approval["counts"]["paid"], 1)
+
     def test_booking_deposit_is_ten_thousand_per_hour(self):
         booking = DatSan.objects.create(
             nguoi_dat=self.user,

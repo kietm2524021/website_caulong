@@ -35,6 +35,9 @@
     .bulk-action.cancel { color: #b91c1c; border-color: #fca5a5; }
     .bulk-action.delete { color: #fff; background: #b91c1c; border-color: #b91c1c; }
     .bulk-action:disabled { opacity: .45; cursor: not-allowed; }
+    .live-update-banner { display: none; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #93c5fd; background: #eff6ff; color: #1e3a8a; padding: 10px 12px; border-radius: 8px; margin-bottom: 14px; font-size: .82rem; font-weight: 800; }
+    .live-update-banner.show { display: flex; }
+    .live-update-banner button { border: 0; background: #2563eb; color: #fff; border-radius: 7px; padding: 7px 10px; font-weight: 800; }
     .operations-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
     .summary-box { border: 1px solid var(--admin-border); background: #fff; padding: 12px 14px; border-radius: 8px; min-width: 0; }
     .summary-box strong { display: block; font-size: 1.35rem; line-height: 1.1; color: #0f172a; }
@@ -85,6 +88,10 @@
 {% endblock %}
 
 {% block content %}
+<div class="live-update-banner" id="bookingLiveBanner">
+    <span>Có thay đổi mới trong danh sách đơn đặt sân.</span>
+    <button type="button" id="bookingLiveReload">Cập nhật ngay</button>
+</div>
 <section class="panel mb-3">
     <div class="panel-header">
         <h2 class="panel-title">Bộ lọc vận hành</h2>
@@ -285,6 +292,10 @@
     const bookingBoxes = Array.from(document.querySelectorAll('.booking-select'));
     const bulkButtons = Array.from(document.querySelectorAll('.bulk-action'));
     const selectedCount = document.getElementById('bulkSelectedCount');
+    const liveBanner = document.getElementById('bookingLiveBanner');
+    const liveReload = document.getElementById('bookingLiveReload');
+    let bookingLiveSignature = "{{ booking_live.signature|default:'' }}";
+    let bookingLiveReloadPending = false;
 
     function updateBulkState() {
         const count = bookingBoxes.filter(function(box) { return box.checked; }).length;
@@ -326,5 +337,45 @@
     }
 
     updateBulkState();
+
+    function hasActiveBookingWork() {
+        const hasSelected = bookingBoxes.some(function(box) { return box.checked; });
+        const activeTag = document.activeElement ? document.activeElement.tagName : "";
+        const isTyping = ["INPUT", "SELECT", "TEXTAREA"].includes(activeTag);
+        return hasSelected || isTyping;
+    }
+
+    function showLiveBanner() {
+        bookingLiveReloadPending = true;
+        if (liveBanner) liveBanner.classList.add('show');
+    }
+
+    async function pollBookingLiveState() {
+        if (document.hidden || bookingLiveReloadPending) return;
+        const separator = window.location.search ? '&' : '?';
+        const url = "{% url 'admin_live_state' %}" + window.location.search + separator + "bookings=1";
+        const response = await fetch(url, {headers: {"X-Requested-With": "XMLHttpRequest"}});
+        if (!response.ok) return;
+        const data = await response.json();
+        const incoming = data.bookings ? data.bookings.signature : "";
+        if (!incoming || !bookingLiveSignature) {
+            bookingLiveSignature = incoming;
+            return;
+        }
+        if (incoming !== bookingLiveSignature) {
+            if (hasActiveBookingWork()) {
+                showLiveBanner();
+            } else {
+                window.location.reload();
+            }
+        }
+    }
+
+    if (liveReload) {
+        liveReload.addEventListener('click', function() {
+            window.location.reload();
+        });
+    }
+    setInterval(pollBookingLiveState, 7000);
 </script>
 {% endblock %}

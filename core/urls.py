@@ -32,6 +32,7 @@ urlpatterns = [
     path('api/ho-tro/widget/', views.support_widget_state, name='support_widget_state'),
     path('api/ho-tro/widget/gui/', views.support_widget_send, name='support_widget_send'),
     path('api/ho-tro/widget/xoa/', support_views.support_widget_delete, name='support_widget_delete'),
+    path('api/live/', views.customer_live_state, name='customer_live_state'),
     path('lich-cong-dong/', views.lich_cong_dong, name='lich_cong_dong'),
     path('dien-dan/bai-viet/<int:bai_id>/', views.chi_tiet_bai_viet, name='chi_tiet_bai_viet'),
     path('xoa-binh-luan/<int:bl_id>/', views.xoa_binh_luan, name='xoa_binh_luan'),
@@ -39,6 +40,7 @@ urlpatterns = [
 
     # --- Console quản trị mới ---
     path('quan-tri/', admin_views.admin_dashboard, name='admin_dashboard'),
+    path('quan-tri/api/live/', admin_views.admin_live_state, name='admin_live_state'),
     path('quan-tri/don-dat-san/', admin_views.admin_bookings, name='admin_bookings'),
     path('quan-tri/don-dat-san/bulk-action/', admin_views.admin_booking_bulk_action, name='admin_booking_bulk_action'),
     path('quan-tri/don-dat-san/<int:booking_id>/action/', admin_views.admin_booking_action, name='admin_booking_action'),
